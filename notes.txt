@@ -2,18 +2,3 @@ Useful References
 
 - https://medium.com/swlh/creating-a-simple-router-simulation-using-python-and-sockets-d6017b441c09
 - https://github.com/lohkokwee/CS441
-
-
-ETH PROTOCOL
-    DONE
-        - client 1 can connect and send eth frame to interface 1
-        - interface 1 can receive eth frame from client 1
-    TODO
-        - N1 eth frame to router, and router to broadcast to all connected nodes
-        - Nodes should listen for eth frame and drop if not intended recipient
-        - Implement for Router Interface 2, Node 2 and Node 3
-
-OTHERS
-    TODO
-        - refactor
-        - other protocols
