@@ -2,15 +2,16 @@ import socket
 import threading
 import time
 from config import *
+from classes.arp import ARP_Table
 
 client1_ip = N1_CONFIG["node_ip_address"]
 client1_mac = N1_CONFIG["node_mac"]
 router = (HOST, N1_CONFIG["network_int_port"])
 
 # Connects client to router interface 1 and exchange/update arp tables from both side
-def handle_router_connection():
+def handle_router_connection(arp_table):
     client.connect(router)
-
+    arp_table.add_record("ip-sample", "mac-sample")
     # Need to exchange router and client mac and ip and update/sync ARP tables
 
 # Handles incoming connection
@@ -19,6 +20,7 @@ def listen():
         received_message = client.recv(1024)
         received_message = received_message.decode("utf-8")
         print("\nMessage: " + received_message)
+        print(arp_table.get_arp_table())
 
 # Gets ethernet data payload to be sent
 def handle_input():
@@ -36,7 +38,8 @@ def handle_input():
 # create socket
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 time.sleep(1)
-handle_router_connection()
+arp_table = ARP_Table()
+handle_router_connection(arp_table)
 
 try:
     threading.Thread(target = listen).start()
