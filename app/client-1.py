@@ -11,7 +11,7 @@ router = (HOST, N1_CONFIG["interface_port"])
 # Connects client to router interface 1 and exchange/update arp tables from both side
 def handle_router_connection(arp_table):
     client.connect(router)
-    arp_table.add_record("ip-sample", "mac-sample")
+    arp_table.add_record("ip-sample", "mac-sample", "socket")
     # Need to exchange router and client mac and ip and update/sync ARP tables
 
 # Handles incoming connection

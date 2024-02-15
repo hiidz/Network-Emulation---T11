@@ -5,8 +5,8 @@ class ARP_Table:
     def __init__(self):
         self.arp_table = {}
 
-    def add_record(self, ip_address: str, mac_address: str):
-        self.arp_table[ip_address] = mac_address
+    def add_record(self, ip_address: str, mac_address: str, connSocket):
+        self.arp_table[ip_address] = {"mac": mac_address, "socket": connSocket}
 
     def get_arp_table(self):
         return self.arp_table
