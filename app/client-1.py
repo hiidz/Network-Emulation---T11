@@ -6,7 +6,7 @@ from classes.arp import ARP_Table
 
 client1_ip = N1_CONFIG["node_ip_address"]
 client1_mac = N1_CONFIG["node_mac"]
-router = (HOST, N1_CONFIG["network_int_port"])
+router = (HOST, N1_CONFIG["interface_port"])
 
 # Connects client to router interface 1 and exchange/update arp tables from both side
 def handle_router_connection(arp_table):
