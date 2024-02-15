@@ -24,19 +24,21 @@ class RouterInterface:
 
 
     def get_available_ip_address(self):
+        # To be obtained by ARP Table
         return "0x3f"
 
 
     def setup_connection(self, conn, address):
         try:
-            ip_address_assigned = False
+            # ip_address_assigned = False
             mac_address_received = False
             request_connection_received = False
             while True:
                 data = conn.recv(1024)
 
+                # message = data.decode("utf-8").split('|')[0]
                 message = data.decode("utf-8").split('|')[-2]
-                # temporary fix until client change code for exchange of info
+                # temporary fix until client follow sequence standard (refer to telegram picture/msg)
                 if(message == "0x21"):
                     message = "request_interface_connection"
 
@@ -64,13 +66,14 @@ class RouterInterface:
                 # Client replies request for MAC address
                 elif message == "mac_address_response":
                     if mac_address_received == False and request_connection_received == True:
+                        # mac_address = data.decode("utf-8").split('|')[1]
                         mac_address = data.decode("utf-8").split('|')[-1]
                         print("Client's MAC address received.")
                         print("Assigning and sending client's IP address")
 
                         # Obtain available IP address and send it to client
                         ip_address = self.get_available_ip_address()
-                        ip_address_assigned = True
+                        # ip_address_assigned = True
                         conn.send(bytes(f"assigned_ip_address|{ip_address}", "utf-8"))
 
                         # With client's IP and MAC address available, update ARP table
@@ -90,15 +93,18 @@ class RouterInterface:
 
 
     def setup_interface_connection(self, conn, address):
-        print("setting up interface connection: ", conn)
+        print("Establishing interface connection")
+
         try:
+            # Send connection request to corresponding interface: payload = "request_interface_connection | {ip_address} | {mac}" 
             conn.send(bytes(f"request_interface_connection|{self.interface_ip_address}|{self.interface_mac}", "utf-8"))
+
             while True:
                 data = conn.recv(1024)
 
                 message = data.decode("utf-8").split('|')[0]
 
-                # Client send request to establish connection
+                # Receive response from corresponding interface
                 if message == "interface_connection_response":
                     ip_address_received = data.decode("utf-8").split('|')[1]
                     mac_address_received = data.decode("utf-8").split('|')[2]
@@ -120,6 +126,7 @@ class RouterInterface:
     def listen(self, conn, address):
         print(f"Connection from {address} established.")
 
+        # Logic for handling/forwarding packets/frames to be implemented here.
         try:
             while True:
                 data = conn.recv(1024)
@@ -141,6 +148,7 @@ class RouterInterface:
 
 
     def handle_input(self):
+        # Logic for receiving command from user input in CLI handled here
         while True:
             command_input = input()
 
@@ -165,9 +173,10 @@ class RouterInterface:
 
 
     def start(self):
+        # If interface connected to another interface, establish connection request
         if(self.connected_interface_port):
-            print("Connected Interface Found")
             self.connected_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
             try:
                 self.connected_socket.connect((HOST, self.connected_interface_port))
                 self.setup_interface_connection(self.connected_socket, (HOST, self.connected_interface_port))
