@@ -36,11 +36,7 @@ class RouterInterface:
             while True:
                 data = conn.recv(1024)
 
-                # message = data.decode("utf-8").split('|')[0]
-                message = data.decode("utf-8").split('|')[-2]
-                # temporary fix until client follow sequence standard (refer to telegram picture/msg)
-                if(message == "0x21"):
-                    message = "request_interface_connection"
+                message = data.decode("utf-8").split('|')[0]
 
                 # Connection is from another interface
                 if message == "request_interface_connection":
@@ -66,8 +62,7 @@ class RouterInterface:
                 # Client replies request for MAC address
                 elif message == "mac_address_response":
                     if mac_address_received == False and request_connection_received == True:
-                        # mac_address = data.decode("utf-8").split('|')[1]
-                        mac_address = data.decode("utf-8").split('|')[-1]
+                        mac_address = data.decode("utf-8").split('|')[1]
                         print("Client's MAC address received.")
                         print("Assigning and sending client's IP address")
 

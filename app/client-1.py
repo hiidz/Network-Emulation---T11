@@ -26,12 +26,7 @@ def listen():
 def handle_input():
     while True:
         command_input = input()
-
-        # hardcoded router mac. need to get from ARP
-        router_mac = "R1"
-
-        # Format: { node-mac | router-mac | data length | data }
-        payload = f"{client1_mac}|{router_mac}|{len(command_input)}|{command_input}"
+        payload = command_input
         client.send(bytes(payload, "utf-8"))
 
 
