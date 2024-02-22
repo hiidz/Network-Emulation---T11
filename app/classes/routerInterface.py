@@ -2,6 +2,7 @@ import socket
 import threading
 from config import HOST
 from classes.arp import ARP_Table
+import re
 
 class RouterInterface:
     interface_ip_address = None
@@ -118,19 +119,36 @@ class RouterInterface:
             print(f"Unexpected error 5: {e}")
 
 
+    def handleIPPacket(self, packet):
+        print(f"IP Packet received: {packet}")
+
+
+    def handleEthernetFrame(self, frame):
+        print(f"Ethernet Frame received: {frame}")
+
+
     def listen(self, conn, address):
         print(f"Connection from {address} established.")
 
-        # Logic for handling/forwarding packets/frames to be implemented here.
+        # Logic for handling/forwarding packets/frames
         try:
             while True:
                 data = conn.recv(1024)
-                decoded_data = data.decode()
-                # if not data:
-                #     print(f"Connection from {address} closed.")
-                #     break
-                print(f"Received data from {address}: {decoded_data}")
-                # conn.send(bytes("data received: " + decoded_data, "utf-8"))
+                data = data.decode()
+
+                # # Regex patterns for frames and packet
+                # Frame: {src:n1,dest:n2,dataLength:5,data:kjdsafhdiu}
+                frame_pattern = r"\{src:[a-zA-Z]\d+,dest:[a-zA-Z]\d+,dataLength:\d+,data:.+\}"
+                # Packet: {src:0x55,dest:0x55,protocol:kill,dataLength:5,data:kjdsafhdiu}
+                packet_pattern = r"\{src:0x[0-9a-fA-F]+,dest:0x[0-9a-fA-F]+,protocol:\w+,dataLength:\d+,data:.+\}"
+
+                # Check if the data received matches either frame or packet pattern
+                if re.match(frame_pattern, data):
+                    self.handleEthernetFrame(data)
+                elif re.match(packet_pattern, data):
+                    self.handleIPPacket(data)
+                else:
+                    print(f"Packet dropped, invalid format. Data received: {data}")
 
         except ConnectionResetError:
             print(f"Connection with client:{address} closed.")
