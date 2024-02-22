@@ -27,3 +27,6 @@ def datagram_initialization(string):
     result['data'] = data_value
 
     return result
+
+frame_pattern = r"\{src:[a-zA-Z\d]{2},dest:[a-zA-Z\d]{2},dataLength:\d+,data:.+\}"
+packet_pattern = r"\{src:0x[0-9a-fA-F]+,dest:0x[0-9a-fA-F]+,protocol:\w+,dataLength:\d+,data:.+\}"

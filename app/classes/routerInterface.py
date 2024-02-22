@@ -3,7 +3,7 @@ import threading
 from config import HOST
 from classes.arp import ARP_Table
 import re
-from util import datagram_initialization
+from util import datagram_initialization, frame_pattern, packet_pattern
 
 class RouterInterface:
     interface_ip_address = None
@@ -120,16 +120,18 @@ class RouterInterface:
             print(f"Unexpected error 5: {e}")
 
 
-    def handleIPPacket(self, packet_str, isFromEthernetFrame):
+    def handleIPPacket(self, packet_str):
         packet = datagram_initialization(packet_str)
 
         # If dest in packet matches router address, router is intended recipient
-        # AND if it is from EthernetFrame, router is NOT intended recipient based on invalid MAC in destination address of dataFrame
-        if packet['dest'] == self.interface_ip_address and not isFromEthernetFrame:
-            print(f"IP Packet received: {packet}")
+        if packet['dest'] == self.interface_ip_address:
+            print(f"IP Packet received. Protocol is: {packet['protocol']}. Payload is: {packet['data']}.")
+
             # Process IP packet if required
+            # # if packet['protocol'] == 'kill/arp etc.':
         else:
-            print("Not intended recipient, will forward based on IP packet")
+            destination_ip_address = packet['dest']
+            print(f"Not intended recipient, will forward based on IP packet: {destination_ip_address}")
             # Create EthernetFrame and route to next interface. (for future, can use BGP routing protocol and route based on IP Prefix)
 
     def handleEthernetFrame(self, frame_str):
@@ -137,10 +139,21 @@ class RouterInterface:
 
         # Check if intended recipient, else forward based on IP packet
         if frame['dest'] == self.interface_mac:
-            print(f"Ethernet Frame received: {frame}")
-            # Process Ethernet frame if required
+            print(f"Ethernet Frame received.")
+            # Process Ethernet frame and its IP packet if required
+            if re.match(packet_pattern, frame['data']):
+                print("Extracting IP packet in payload...")
+                self.handleIPPacket(frame['data'])
+            else:
+                print(f"Payload is: {frame['data']}.")
+
+
+        elif frame['dest'] == "FF":
+            print("Broadcast Frame received, will broadcast to all device in the network")
+            # Handle broadcast logic
+
         else:
-            self.handleIPPacket(frame['data'], True)
+            print(f"Invalid MAC address. Not intended recipient. Will drop frame...")
 
 
     def listen(self, conn, address):
@@ -152,19 +165,14 @@ class RouterInterface:
                 data = conn.recv(1024)
                 data = data.decode()
 
-                # # Regex patterns for frames and packet
-                # Frame: {src:n1,dest:n2,dataLength:5,data:kjdsafhdiu}
-                frame_pattern = r"\{src:[a-zA-Z]\d+,dest:[a-zA-Z]\d+,dataLength:\d+,data:.+\}"
-                # Packet: {src:0x55,dest:0x55,protocol:kill,dataLength:5,data:kjdsafhdiu}
-                packet_pattern = r"\{src:0x[0-9a-fA-F]+,dest:0x[0-9a-fA-F]+,protocol:\w+,dataLength:\d+,data:.+\}"
 
-                # Check if the data received matches either frame or packet pattern
+                # Check if the datagram received matches either frame or packet regex pattern
                 if re.match(frame_pattern, data):
                     self.handleEthernetFrame(data)
                 elif re.match(packet_pattern, data):
-                    self.handleIPPacket(data, False)
+                    self.handleIPPacket(data)
                 else:
-                    print(f"Packet dropped, invalid format. Data received: {data}")
+                    print(f"Datagram dropped, invalid format. Data received: {data}")
 
         except ConnectionResetError:
             print(f"Connection with client:{address} closed.")
