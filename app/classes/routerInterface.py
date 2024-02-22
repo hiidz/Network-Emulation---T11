@@ -120,6 +120,30 @@ class RouterInterface:
             print(f"Unexpected error 5: {e}")
 
 
+    # Test cases that we can use via client side:
+
+    #     valid IP packet
+    #     - {src:0x55,dest:0x11,protocol:kill,dataLength:5,data:iwanttokillyou!}
+
+    #     IP packet with invalid destination
+    #     - {src:0x55,dest:0x66,protocol:kill,dataLength:5,data:iwanttokillyou!}
+
+    #     valid ETH frame without IP packet
+    #     - {src:n1,dest:R1,dataLength:5,data:thisIsNotAnIPPacket}
+
+    #     valid ETH frame with valid IP packet
+    #     - {src:n1,dest:R1,dataLength:5,data:{src:0x55,dest:0x11,protocol:kill,dataLength:5,data:iwanttokillyou!}}
+
+    #     valid ETH frame with invalid IP packet destination
+    #     - {src:n1,dest:R1,dataLength:5,data:{src:0x55,dest:0x66,protocol:kill,dataLength:5,data:iwanttokillyou!}}
+
+    #     ETH frame with invalid destination
+    #     - {src:n1,dest:R2,dataLength:5,data:ThisCanBeAnything}
+
+    #     ETH broadcast with dest 'FF'
+    #     - {src:n1,dest:FF,dataLength:5,data:{src:0x55,dest:0x11,protocol:arp,dataLength:5,data:ThisIsARPBroadcast!}}
+
+
     def handleIPPacket(self, packet_str):
         packet = datagram_initialization(packet_str)
 
