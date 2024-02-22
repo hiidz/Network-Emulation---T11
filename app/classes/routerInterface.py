@@ -3,6 +3,7 @@ import threading
 from config import HOST
 from classes.arp import ARP_Table
 import re
+from util import datagram_initialization
 
 class RouterInterface:
     interface_ip_address = None
@@ -119,12 +120,27 @@ class RouterInterface:
             print(f"Unexpected error 5: {e}")
 
 
-    def handleIPPacket(self, packet):
-        print(f"IP Packet received: {packet}")
+    def handleIPPacket(self, packet_str, isFromEthernetFrame):
+        packet = datagram_initialization(packet_str)
 
+        # If dest in packet matches router address, router is intended recipient
+        # AND if it is from EthernetFrame, router is NOT intended recipient based on invalid MAC in destination address of dataFrame
+        if packet['dest'] == self.interface_ip_address and not isFromEthernetFrame:
+            print(f"IP Packet received: {packet}")
+            # Process IP packet if required
+        else:
+            print("Not intended recipient, will forward based on IP packet")
+            # Create EthernetFrame and route to next interface. (for future, can use BGP routing protocol and route based on IP Prefix)
 
-    def handleEthernetFrame(self, frame):
-        print(f"Ethernet Frame received: {frame}")
+    def handleEthernetFrame(self, frame_str):
+        frame = datagram_initialization(frame_str)
+
+        # Check if intended recipient, else forward based on IP packet
+        if frame['dest'] == self.interface_mac:
+            print(f"Ethernet Frame received: {frame}")
+            # Process Ethernet frame if required
+        else:
+            self.handleIPPacket(frame['data'], True)
 
 
     def listen(self, conn, address):
@@ -146,7 +162,7 @@ class RouterInterface:
                 if re.match(frame_pattern, data):
                     self.handleEthernetFrame(data)
                 elif re.match(packet_pattern, data):
-                    self.handleIPPacket(data)
+                    self.handleIPPacket(data, False)
                 else:
                     print(f"Packet dropped, invalid format. Data received: {data}")
 
