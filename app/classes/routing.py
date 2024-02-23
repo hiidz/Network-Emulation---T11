@@ -15,8 +15,10 @@ class Routing_Table:
         self.routing_table[prefix] = destination
 
     
-    def remove_entry(self, prefix):
-        del self.routing_table[prefix]
+    def remove_entry(self, ip_address):
+        keys_to_delete = [key for key, val in self.routing_table.items() if val == ip_address]
+        for key in keys_to_delete:
+            del self.routing_table[key]
 
 
     def getNextHopIP(self, ip):

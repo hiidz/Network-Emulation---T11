@@ -34,12 +34,12 @@ class RouterInterface:
         self.routing_table =Routing_Table()
         self.dhcp_table = {}
 
-        self.interface_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.interface_socket.bind((HOST, interface_port))
-
         for ip in ip_address_available:
             # 1 = IP address available
             self.dhcp_table[ip] = 1
+
+        self.interface_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.interface_socket.bind((HOST, interface_port))
 
 
     def get_available_ip_address(self):
@@ -64,6 +64,7 @@ class RouterInterface:
     def handle_connection(self, conn, address):
         hasReceivedMACAddressResponse = False
         hasReceivedConnectionRequest = False
+        hasAssignedIPAddress = False
 
         hasUpdatedARP = False
         hasUpdatedRouting = False
@@ -107,10 +108,11 @@ class RouterInterface:
                 elif message == "mac_address_response":
                     if hasReceivedMACAddressResponse == False and hasReceivedConnectionRequest == True:
                         mac_address = data.split('|')[1]
-                        print("Client's MAC address received: mac_address")
+                        print(f"Client's MAC address received: {mac_address}")
 
                         # Obtain available IP address and send it to client
                         ip_address = self.get_available_ip_address()
+                        hasAssignedIPAddress = True
 
                         if ip_address:
                             responseIPSuccsss = f"assigned_ip_address|{ip_address}"
@@ -131,7 +133,8 @@ class RouterInterface:
                         hasReceivedMACAddressResponse = True
 
             # Connection is established and now ready to indefinitely listen for incoming packets from connection
-            self.listen(conn, address, hasUpdatedRouting)
+            # hasUpdatedARP = IP address of connection
+            self.listen(conn, address, hasUpdatedARP)
     
         except ConnectionResetError:
             print(f"Failure to setup connection with {address}.")
@@ -140,7 +143,9 @@ class RouterInterface:
             if hasUpdatedARP:
                 self.arp_table.remove_record(hasUpdatedARP)
             if hasUpdatedRouting:
-                self.routing_table.remove_entry(hasUpdatedRouting)
+                self.routing_table.remove_entry(hasUpdatedARP)
+            if hasAssignedIPAddress:
+                self.dhcp_table[hasUpdatedARP] = 1
 
         except ConnectionAbortedError:
             print(f"Failure to setup connection with {address}.")
@@ -149,7 +154,9 @@ class RouterInterface:
             if hasUpdatedARP:
                 self.arp_table.remove_record(hasUpdatedARP)
             if hasUpdatedRouting:
-                self.routing_table.remove_entry(hasUpdatedRouting)
+                self.routing_table.remove_entry(hasUpdatedARP)
+            if hasAssignedIPAddress:
+                self.dhcp_table[hasUpdatedARP] = 1
 
         except Exception as e:
             print(f"Unexpected error 6: {e}")
@@ -189,7 +196,8 @@ class RouterInterface:
                     break
 
             # Connection is established and now ready to indefinitely listen for incoming packets from connection
-            threading.Thread(target = self.listen, args=(conn, address, hasUpdatedRouting)).start()
+            # hasUpdatedARP = IP address of connection
+            threading.Thread(target = self.listen, args=(conn, address, hasUpdatedARP)).start()
     
         except ConnectionResetError:
             print(f"Failure to setup interface connection with {address}.")
@@ -198,7 +206,7 @@ class RouterInterface:
             if hasUpdatedARP:
                 self.arp_table.remove_record(hasUpdatedARP)
             if hasUpdatedRouting:
-                self.routing_table.remove_entry(hasUpdatedRouting)
+                self.routing_table.remove_entry(hasUpdatedARP)
 
         except Exception as e:
             print(f"Unexpected error 5: {e}")
@@ -321,8 +329,9 @@ class RouterInterface:
         except ConnectionResetError:
             print(f"Connection with client:{address} closed.")
             # Remove routing
-            if listenedIPAddress:
-                self.routing_table.remove_entry(listenedIPAddress)
+            self.routing_table.remove_entry(listenedIPAddress)
+            if listenedIPAddress in self.dhcp_table:
+                self.dhcp_table[listenedIPAddress] = 1
 
             # Remove ARP ??? probably should cache
             # self.arp_table.remove_record(listenedIPAddress)
@@ -330,8 +339,9 @@ class RouterInterface:
         except ConnectionAbortedError:
             print(f"Connection with client:{address} closed.")
             # Remove routing
-            if listenedIPAddress:
-                self.routing_table.remove_entry(listenedIPAddress)
+            self.routing_table.remove_entry(listenedIPAddress)
+            if listenedIPAddress in self.dhcp_table:
+                self.dhcp_table[listenedIPAddress] = 1
 
             # Remove ARP ??? probably should cache
             # self.arp_table.remove_record(listenedIPAddress)
@@ -339,8 +349,9 @@ class RouterInterface:
         except Exception as e:
             print(f"Unexpected error 4: {e}")
             # Remove routing
-            if listenedIPAddress:
-                self.routing_table.remove_entry(listenedIPAddress)
+            self.routing_table.remove_entry(listenedIPAddress)
+            if listenedIPAddress in self.dhcp_table:
+                self.dhcp_table[listenedIPAddress] = 1
 
             # Remove ARP ??? probably should cache
             # self.arp_table.remove_record(listenedIPAddress)
@@ -357,6 +368,8 @@ class RouterInterface:
                 print(self.arp_table.get_arp_table())
             elif command_input == "routing":
                 print(self.routing_table.get_routing_table())
+            elif command_input == "dhcp":
+                print(self.dhcp_table)
             else:
                 print("No such command. Try again")
 
