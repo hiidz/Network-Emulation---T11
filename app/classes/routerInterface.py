@@ -31,15 +31,16 @@ class RouterInterface:
         self.interface_socket.bind((HOST, interface_port))
 
         for ip in ip_address_available:
-            self.dhcp_table[ip  ] = 1
+            self.dhcp_table[ip] = 1
 
 
     def get_available_ip_address(self):
         for ip, availability in self.dhcp_table.items():
             if availability == 1:
+                self.dhcp_table[ip] = 0
                 return ip
         return None
-    
+
 
     def isIPAddressInNetwork(self, ip):
         if ip[:2+self.subnet_mask] == self.interface_ip_address[:2+self.subnet_mask]:
@@ -51,7 +52,6 @@ class RouterInterface:
     # Handle request for connection from other clients and/or interfaces
     def handle_connection(self, conn, address):
         try:
-            # ip_address_assigned = False
             mac_address_received = False
             request_connection_received = False
             while True:
@@ -185,7 +185,7 @@ class RouterInterface:
         else:
             destination_ip_address = packet['dest']
             print(f"Not intended recipient, will forward based on IP packet: {destination_ip_address}")
-            # Create EthernetFrame and route to next interface. (for future, can use BGP routing protocol and route based on IP Prefix)
+            # Create EthernetFrame and route to next interface. (for future, can use BGP routing protocol to dynamically update routing table rather than static)
 
             #Check if IP address is in router network
             if self.isIPAddressInNetwork(destination_ip_address):
