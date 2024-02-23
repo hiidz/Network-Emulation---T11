@@ -7,8 +7,16 @@ class Routing_Table:
         self.routing_table = {}
 
 
+    def get_routing_table(self):
+        return self.routing_table
+
+
     def add_entry(self, prefix: str, destination: str):
         self.routing_table[prefix] = destination
+
+    
+    def remove_entry(self, prefix):
+        del self.routing_table[prefix]
 
 
     def getNextHopIP(self, ip):
