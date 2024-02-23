@@ -273,6 +273,16 @@ class RouterInterface:
         # Logic for receiving command from user input in CLI handled here
         while True:
             command_input = input()
+            if command_input == "whoami":
+                print(command_input)
+                print(f"Routers IP address is {self.interface_ip_address}")
+                print(f"Routers MAC is {self.interface_mac}")
+            elif command_input == "arp":
+                print(command_input)
+            elif command_input == "routing":
+                print(command_input)
+            else:
+                print("No such command. Try again")
 
 
     def multi_listen_handler(self):
