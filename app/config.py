@@ -5,13 +5,17 @@ R1_2_PORT = 8200
 R1_1_CONFIG = {
   "interface_ip_address": "0x11",
   "interface_mac": "R1",
-  "interface_port": R1_1_PORT
+  "interface_port": R1_1_PORT,
+  "subnet_mask": 1,
+  "ip_address_available": ['0x1A']
 }
 
 R1_2_CONFIG = {
   "interface_ip_address": "0x21",
   "interface_mac": "R2",
   "interface_port": R1_2_PORT,
+  "subnet_mask": 1,
+  "ip_address_available": ['0x2A', '0x2B'],
   "connected_interface_port": R1_1_PORT
 }
 
