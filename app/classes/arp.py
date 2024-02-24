@@ -10,8 +10,9 @@ class ARP_Table:
         self.arp_table[ip_address] = {"mac": mac_address, "socket": connSocket}
 
 
-    def remove_record(self, ip_address):
-        del self.arp_table[ip_address]
+    def remove_record(self, ip_address):    
+        if self.arp_table.get(ip_address) is not None:
+            del self.arp_table[ip_address]
 
 
     def get_arp_table(self):
