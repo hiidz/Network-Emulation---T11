@@ -14,7 +14,6 @@ class RouterInterface:
     interface_port = None
     interface_socket = None
     connected_interface_port = None
-    connected_socket = None
     subnet_mask = None
     conn_list = None
     arp_table = None
@@ -29,6 +28,7 @@ class RouterInterface:
         self.connected_interface_port = connected_interface_port
         self.subnet_mask = subnet_mask
 
+        # List of all socket connections. Will be used to close all active connections upon exit
         self.conn_list = []
 
         self.arp_table = ARP_Table()
@@ -47,145 +47,22 @@ class RouterInterface:
             return False
 
 
-    # Handle request for connection from other clients and/or interfaces
-    def handle_connection(self, conn, address):
-        hasReceivedMACAddressResponse = False
-        hasReceivedConnectionRequest = False
-
-        conn_ip_address = None
-
-        try:
-            while True:
-                data = conn.recv(1024)
-                data = data.decode()
-
-                message = data.split('|')[0]
-
-                # Connection is from another interface
-                if message == "request_interface_connection":
-                    ip_address_received = conn_ip_address = data.split('|')[1]
-                    mac_address_received = data.split('|')[2]
-                    subnet_mask_received = data.split('|')[3]
-
-                    self.arp_table.add_record(ip_address_received, mac_address_received, conn)
-
-                    ipPrefix = ip_address_received[:2+int(subnet_mask_received)]
-                    self.routing_table.add_entry(ipPrefix, ip_address_received)
-
-                    conn.send(bytes(f"interface_connection_response|{self.interface_ip_address}|{self.interface_mac}|{self.subnet_mask}", "utf-8"))
-                    self.connected_socket = conn
-                    break
-
-                # Client send request to establish connection
-                elif message == "request_connection":
-                    if hasReceivedConnectionRequest == False:
-                        print(f"Request for connection received...")
-                        hasReceivedConnectionRequest = True
-
-                        # Interface send request to client's for their MAC address
-                        requestMACAddress = "request_mac_address|null"
-                        print(f"Requesting for client's MAC address. Data sending: {requestMACAddress}")
-                        conn.send(bytes(requestMACAddress, "utf-8"))
-
-                # Client replies request for MAC address
-                elif message == "mac_address_response":
-                    if hasReceivedMACAddressResponse == False and hasReceivedConnectionRequest == True:
-                        mac_address = data.split('|')[1]
-                        print(f"Client's MAC address received: {mac_address}")
-
-                        # Obtain available IP address and send it to client
-                        ip_address = conn_ip_address = self.dhcp_table.get_available_ip_address()
-
-                        if ip_address:
-                            responseIPSuccsss = f"assigned_ip_address|{ip_address}"
-                            print(f"Assigning and sending client's IP address. Data sending: {responseIPSuccsss}")
-                            conn.send(bytes(responseIPSuccsss, "utf-8"))
-
-                            # With client's IP and MAC address available, update ARP table
-                            print("Updating ARP table")
-                            self.arp_table.add_record(ip_address, mac_address, conn)
-                            break
-
-                        else:
-                            responseIPFail = f"assigned_ip_address|null"
-                            print(f"No IP address available. Data sending: {responseIPFail}")
-                            conn.send(bytes(responseIPFail, "utf-8"))
-
-                        hasReceivedMACAddressResponse = True
-
-            # Connection is established and now ready to indefinitely listen for incoming packets from connection
-            self.listen(conn, address, conn_ip_address)
-    
-        except (ConnectionResetError, ConnectionAbortedError):
-            print(f"Failure to setup connection with {address}.")
-
-            # Undo ARP, Routing and DHCP changes
-            self.arp_table.remove_record(conn_ip_address)
-            self.routing_table.remove_entry(conn_ip_address)
-            self.dhcp_table.deallocateIP(conn_ip_address)
-
-        except Exception as e:
-            print(f"Unexpected error 6: {e}")
-
-
-    # Initiate connection with another interface
-    def setup_interface_connection(self, conn, address):
-
-        conn_ip_address = None
-
-        try:
-            requestInterfaceConnection = f"request_interface_connection|{self.interface_ip_address}|{self.interface_mac}|{self.subnet_mask}"
-            # Send connection request to corresponding interface: payload = "request_interface_connection | {ip_address} | {mac}" 
-            conn.send(bytes(requestInterfaceConnection, "utf-8"))
-            print(f"Establishing interface connection. Data sending: {requestInterfaceConnection}")
-
-            while True:
-                data = conn.recv(1024)
-                data = data.decode()
-
-                message = data.split('|')[0]
-
-                # Receive response from corresponding interface
-                if message == "interface_connection_response":
-                    print(f"Received interface connection response from {address}. Payload: {data}")
-                    ip_address_received = conn_ip_address = data.split('|')[1]
-                    mac_address_received = data.split('|')[2]
-                    subnet_mask_received = data.split('|')[3]
-
-                    self.arp_table.add_record(ip_address_received, mac_address_received, conn)
-
-                    ipPrefix = ip_address_received[:2+int(subnet_mask_received)]
-                    self.routing_table.add_entry(ipPrefix, ip_address_received)
-
-                    break
-
-            # Connection is established and now ready to indefinitely listen for incoming packets from connection
-            threading.Thread(target = self.listen, args=(conn, address, conn_ip_address)).start()
-    
-        except ConnectionResetError:
-            print(f"Failure to setup interface connection with {address}.")
-
-            # Remove ARP and routing if needed
-            self.arp_table.remove_record(conn_ip_address)
-            self.routing_table.remove_entry(conn_ip_address)
-
-        except Exception as e:
-            print(f"Unexpected error 5: {e}")
-
-
     # Test cases that we can use via client side:
 
     #     valid IP packet
     #     - {src:0x55,dest:0x11,protocol:kill,dataLength:5,data:iwanttokillyou!}
 
     #     IP packet with invalid destination
-    #     - {   
+    #     - {src:0x55,dest:0x66,protocol:kill,dataLength:5,data:iwanttokillyou!}
 
     #     valid ETH frame without IP packet
     #     - {src:n1,dest:R1,dataLength:5,data:thisIsNotAnIPPacket}
 
-    #     valid ETH frame with valid IP packet
+    #     valid ETH frame with valid IP packet (dest: router IP)
     #     - {src:n1,dest:R1,dataLength:5,data:{src:0x55,dest:0x11,protocol:kill,dataLength:5,data:iwanttokillyou!}}
+        
+    #     valid ETH frame with valid IP packet (dest: client IP)
+    #     - {src:n1,dest:R1,dataLength:5,data:{src:0x55,dest:0x1A,protocol:kill,dataLength:5,data:iwanttokillyou!}}
 
     #     valid ETH frame with invalid IP packet destination
     #     - {src:n1,dest:R1,dataLength:5,data:{src:0x55,dest:0x66,protocol:kill,dataLength:5,data:iwanttokillyou!}}
@@ -208,17 +85,19 @@ class RouterInterface:
             # # if packet['protocol'] == 'kill/arp etc.':
 
         else:
+            # Create EthernetFrame and route to next interface. (for future, can use BGP routing protocol to dynamically update routing table rather than static)
             destination_ip_address = packet['dest']
             print(f"Not intended recipient, will forward based on IP packet: {destination_ip_address}")
-            # Create EthernetFrame and route to next interface. (for future, can use BGP routing protocol to dynamically update routing table rather than static)
 
-            #Check if IP address is in router network
+            #Check if IP address is in router network.
             if self.isIPAddressInNetwork(destination_ip_address):
                 print("Destination IP address is in the network. Will transmit as per ARP table.")
 
+                # Get MAC address from ARP
                 # Catch error if no mac address.  Maybe ARP broadcast. to be done
                 next_hop_mac = self.arp_table.get_arp_table()[destination_ip_address]['mac']
 
+            # Use routing table to search for highest matching prefix interface
             else:
                 print("Destination IP address is not in the network. Will look up routing table...")
 
@@ -228,17 +107,19 @@ class RouterInterface:
                 if next_hop_ip:
                     print(f"Routing found, transmitting to the following IP address: {next_hop_ip}")
 
-                    # Catch error if no mac address. Maybe ARP broadcast. to be done
+                    # Get MAC address from ARP
+                    # Catch error if no mac address.  Maybe ARP broadcast. to be done
                     next_hop_mac = self.arp_table.get_arp_table()[next_hop_ip]['mac']
 
                 else:
-                    print(f"No routing can be found for the following IP address: {destination_ip_address}")
+                    # Maybe send msg back to client that no routing is found
+                    print(f"No routing can be found for the following IP address: {destination_ip_address}. Packet will be dropped.")
                     return
 
             frame_str = f"{{src:{self.interface_mac},dest:{next_hop_mac},dataLength:{len(packet['data'])},data:{packet['data']}}}"
             print(f"New Frame to be broadcasted: {frame_str}")
 
-            # Broadcast to all sockets
+            # Broadcast to all sockets (incl. connected interfaces if any)
             for arp_value in self.arp_table.get_arp_table().values():
                 print(f"Broadcasting to: {arp_value['mac']}")
                 arp_value['socket'].send(bytes(frame_str, "utf-8"))
@@ -247,7 +128,7 @@ class RouterInterface:
     def handleEthernetFrame(self, frame_str):
         frame = datagram_initialization(frame_str)
 
-        # Check if intended recipient, else forward based on IP packet
+        # Check if intended recipient, or if broadcast ethernet, else forward based on IP packet
         if frame['dest'] == self.interface_mac:
             print(f"Ethernet Frame received: {frame}")
 
@@ -260,7 +141,7 @@ class RouterInterface:
                 print(f"Payload is: {frame['data']}.")
 
         elif frame['dest'] == "FF":
-            # Broadcast to all sockets
+            # Broadcast to all sockets in the network (excl. connected interfaces if any)
             print("Broadcast Frame received, will broadcast to all device in the network")
             for arp_key, arp_value in self.arp_table.get_arp_table().items():
                 if self.isIPAddressInNetwork(arp_key):
@@ -271,9 +152,8 @@ class RouterInterface:
 
 
     def listen(self, conn, address, listenedIPAddress):
-        print(f"Connection from {address} established.")
+        print(f"Connection from {listenedIPAddress} ({address}) established.")
 
-        # Logic for handling/forwarding packets/frames
         try:
             while True:
                 data = conn.recv(1024)
@@ -282,23 +162,186 @@ class RouterInterface:
                 # Check if the datagram received matches either frame or packet regex pattern
                 if re.match(frame_pattern, data):
                     self.handleEthernetFrame(data)
+
                 elif re.match(packet_pattern, data):
                     self.handleIPPacket(data)
+
                 else:
-                    print(f"Datagram dropped, invalid format. Data received: {data}")
+                    print(f"Datagram from {listenedIPAddress}({address}) dropped, invalid format. Data received: {data}")
 
         except (ConnectionResetError, ConnectionAbortedError):
-            print(f"Connection with client:{address} closed.")
-            # Remove routing
-            self.routing_table.remove_entry(listenedIPAddress)
-            if listenedIPAddress in self.dhcp_table.get_dhcp_table():
-                self.dhcp_table.reallocateIP(listenedIPAddress)
+            print(f"Connection with {listenedIPAddress}({address}) closed.")
 
-            # Remove ARP ??? probably should cache
-            # self.arp_table.remove_record(listenedIPAddress)=
+            # Remove routing and reallocate IP assigned via DHCP
+            self.routing_table.remove_entry(listenedIPAddress)
+            self.dhcp_table.reallocateIP(listenedIPAddress)
+            # # Remove ARP ??? probably should cache
+            # self.arp_table.remove_record(listenedIPAddress)
 
         except Exception as e:
             print(f"Unexpected error 4: {e}")
+
+
+    # Handle request for connection from other clients and/or interfaces
+    def handle_connection(self, conn, address):
+        conn_ip_address = None
+
+        try:
+            hasReceivedConnectionRequest = False
+            while True:
+                data = conn.recv(1024)
+                data = data.decode()
+
+                message = data.split('|')[0]
+
+                # Connection is from another interface
+                if message == "request_interface_connection":
+                    ip_address_received = conn_ip_address = data.split('|')[1]
+                    mac_address_received = data.split('|')[2]
+                    subnet_mask_received = data.split('|')[3]
+
+                    print(f"Request for interface connection received by {address}... Updating ARP and Routing Table.")
+
+                    self.arp_table.add_record(ip_address_received, mac_address_received, conn)
+                    ipPrefix = ip_address_received[:2+int(subnet_mask_received)]
+                    self.routing_table.add_entry(ipPrefix, ip_address_received)
+
+                    interface_connection_response = f"interface_connection_response|{self.interface_ip_address}|{self.interface_mac}|{self.subnet_mask}"
+                    print(f"Sending response payload: {interface_connection_response}")
+                    conn.send(bytes(interface_connection_response, "utf-8"))
+
+                    break
+
+                # Client send request to establish connection
+                elif message == "request_connection":
+                    print(f"Request for connection received by {address}.") 
+
+                    # Interface send request to client's for their MAC address
+                    requestMACAddress = "request_mac_address|null"
+                    print(f"Requesting for client's MAC address. Data sending: {requestMACAddress}")
+                    conn.send(bytes(requestMACAddress, "utf-8"))
+
+                    hasReceivedConnectionRequest = True
+
+                # Client replies request for MAC address
+                elif message == "mac_address_response":
+                    if hasReceivedConnectionRequest == True:
+                        mac_address = data.split('|')[1]
+                        print(f"Client's MAC address received: {mac_address}")
+
+                        # Obtain available IP address and send it to client
+                        ip_address = conn_ip_address = self.dhcp_table.get_available_ip_address()
+
+                        if ip_address:
+                            responseIPSuccsss = f"assigned_ip_address|{ip_address}"
+                            print(f"Assigning and sending client's IP address. Data sending: {responseIPSuccsss}")
+                            conn.send(bytes(responseIPSuccsss, "utf-8"))
+
+                            # With client's IP and MAC address available, update ARP table
+                            print("Updating ARP table and deallocating DHCP IP address")
+                            self.arp_table.add_record(ip_address, mac_address, conn)
+                            break
+
+                        else:
+                            responseIPFail = f"assigned_ip_address|null"
+                            print(f"No IP address available. Data sending: {responseIPFail}")
+                            conn.send(bytes(responseIPFail, "utf-8"))
+
+                else:
+                    print(f"Invalid connection request/response received... Data received: {data}")
+
+            # Connection is established and now ready to indefinitely listen for incoming packets from connection
+            self.listen(conn, address, conn_ip_address)
+    
+        except (ConnectionResetError, ConnectionAbortedError):
+            print(f"Failure to setup connection with {address}.")
+
+            # Undo ARP, Routing and DHCP changes
+            self.arp_table.remove_record(conn_ip_address)
+            self.routing_table.remove_entry(conn_ip_address)
+            self.dhcp_table.deallocateIP(conn_ip_address)
+
+        except Exception as e:
+            print(f"Unexpected error 6: {e}")
+
+
+    # Initiate connection with another interface
+    def setup_interface_connection(self, conn, address):
+        conn_ip_address = None
+
+        try:
+            # Send connection request to corresponding interface: payload = "request_interface_connection | {ip_address} | {mac}" 
+            requestInterfaceConnection = f"request_interface_connection|{self.interface_ip_address}|{self.interface_mac}|{self.subnet_mask}"
+            conn.send(bytes(requestInterfaceConnection, "utf-8"))
+            print(f"Establishing interface connection. Data sending: {requestInterfaceConnection}")
+
+            while True:
+                data = conn.recv(1024)
+                data = data.decode()
+
+                message = data.split('|')[0]
+
+                # Receive response from corresponding interface
+                if message == "interface_connection_response":
+                    print(f"Received interface connection response. Payload: {data}")
+                    ip_address_received = conn_ip_address = data.split('|')[1]
+                    mac_address_received = data.split('|')[2]
+                    subnet_mask_received = data.split('|')[3]
+
+                    print("Updating ARP and Routing Table.")
+                    self.arp_table.add_record(ip_address_received, mac_address_received, conn)
+                    ipPrefix = ip_address_received[:2+int(subnet_mask_received)]
+                    self.routing_table.add_entry(ipPrefix, ip_address_received)
+
+                    break
+
+                else:
+                    print(f"Invalid connection response received... Data received: {data}")
+
+            # Connection is established and now ready to indefinitely listen for incoming packets from connection
+            self.listen(conn, address, conn_ip_address)
+    
+        except (ConnectionResetError, ConnectionAbortedError):
+            print(f"Failure to setup interface connection with {address}.")
+
+            # Remove ARP and routing if needed
+            self.arp_table.remove_record(conn_ip_address)
+            self.routing_table.remove_entry(conn_ip_address)
+
+        except Exception as e:
+            print(f"Unexpected error 5: {e}")
+
+
+    def multi_listen_handler(self):
+        try:
+            self.interface_socket.listen()
+
+            while True:
+                conn, address = self.interface_socket.accept()
+                self.conn_list.append(conn)
+
+                # For each new connection, create a new thread to continue listening to that connection
+                threading.Thread(target=self.handle_connection, args=(conn, address)).start()
+
+        except OSError:
+            print("Server socket has been closed...")
+
+        except Exception as e:
+            print(f"Unexpected error 3: {e}")
+
+
+    def connectToInterface(self, interface_port):
+        try:
+            connected_interface_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            connected_interface_socket.connect((HOST, interface_port))
+            self.conn_list.append(connected_interface_socket)
+            threading.Thread(target=self.setup_interface_connection, args=(connected_interface_socket, (HOST, self.connected_interface_port))).start()
+
+        except ConnectionRefusedError:
+            print(f"Unable to connect to the connected interface with port: {interface_port}.")
+
+        except Exception as e:
+            print(f"Unexpected error 18 {e}")
 
 
     def handle_input(self):
@@ -317,50 +360,19 @@ class RouterInterface:
             elif command_input == "reconnect":
                 if(self.connected_interface_port):
                     print("Attempting to reconnect to connected interface...")
-                    self.connectToInterface()
+                    self.connectToInterface(self.connected_interface_port)
                 else:
                     print("This router is not configured to connect to other interfaces...")
+            elif command_input == "man":
+                print("whoami, arp, routing, dhcp, reconnect")
             else:
                 print("No such command. Try again")
-
-    
-    def connectToInterface(self):
-        if(self.connected_interface_port):
-            self.connected_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-            try:
-                self.connected_socket.connect((HOST, self.connected_interface_port))
-                self.setup_interface_connection(self.connected_socket, (HOST, self.connected_interface_port))
-
-            except ConnectionRefusedError:
-                print(f"Unable to connect to the connected interface.")
-
-            except Exception as e:
-                print(f"Unexpected error 18 {e}")
-
-
-    def multi_listen_handler(self):
-        try:
-            self.interface_socket.listen()
-
-            while True:
-                conn, address = self.interface_socket.accept()
-                self.conn_list.append(conn)
-
-                # For each new connection, create a new thread to continue listening
-                # Will exchange clients MAC address for a free IP address to assign to client
-                threading.Thread(target=self.handle_connection, args=(conn, address)).start()
-
-        except OSError:
-            print("Server socket has been closed...")
-
-        except Exception as e:
-            print(f"Unexpected error 3: {e}")
 
 
     def start(self):
         # If interface connected to another interface, establish connection request
-        self.connectToInterface()
+        if(self.connected_interface_port):
+            self.connectToInterface(self.connected_interface_port)
 
         try:
             # A thread that will listen for new incoming connections
@@ -368,13 +380,12 @@ class RouterInterface:
             self.handle_input()
 
         except KeyboardInterrupt:
-            self.interface_socket.close()
-
-            if self.connected_socket != None:
-                self.connected_socket.close()
-
+            # Close any other connection, including clients and interfaces, if any
             for conn in self.conn_list:
                 conn.close()
+
+            # Close router interface listening port
+            self.interface_socket.close()
 
         except Exception as e:
             print(f"Unexpected error 1: {e}")
