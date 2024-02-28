@@ -7,7 +7,7 @@ R1_1_CONFIG = {
   "interface_mac": "R1",
   "interface_port": R1_1_PORT,
   "subnet_mask": 1,
-  "ip_address_available": ['0x1A']
+  "ip_address_available": ['0x1A'],
 }
 
 R1_2_CONFIG = {
@@ -16,6 +16,7 @@ R1_2_CONFIG = {
   "interface_port": R1_2_PORT,
   "subnet_mask": 1,
   "ip_address_available": ['0x2A', '0x2B'],
+  "connected_interface_ip": "0x11",
   "connected_interface_port": R1_1_PORT
 }
 
