@@ -63,7 +63,11 @@ def handle_router_connection():
                 print(f"Invalid connection response received... Data received: {data}")
     
     except (ConnectionResetError, ConnectionAbortedError):
-            print(f"Connection with {router} closed.")
+            print(f"Connection with {router} aborted.")
+            # Need to clear assigned IP address value and send dhcp release to server
+
+    except Exception as e:
+        print(f"Unexpected error 2: {e}")
 
     # Connection is established and now ready to indefinitely listen for incoming packets from connection
     threading.Thread(target=listen).start()
@@ -95,36 +99,45 @@ def handle_arp_request(arp_request, conn):
 
 # Handles incoming connection
 def listen():
-    while True:
-        received_message = client.recv(1024)
-        received_message = received_message.decode("utf-8")
-        print("\nMessage: " + received_message)
+    print(f"Connection from {router}) established.")
+    try:
+        while True:
+            received_message = client.recv(1024)
+            received_message = received_message.decode("utf-8")
+            print("\nMessage: " + received_message)
 
-        if received_message.split('|')[0] =='ARP Response':
-            #Handle adding to the ARP table
-            payload = received_message.split('|')[1]
-            pattern = r"(0x\w{2}) is at (\w{2})"
-            match = re.match(pattern, payload)
+            if received_message.split('|')[0] =='ARP Response':
+                #Handle adding to the ARP table
+                payload = received_message.split('|')[1]
+                pattern = r"(0x\w{2}) is at (\w{2})"
+                match = re.match(pattern, payload)
 
-            if match:
-                arp_ip_address = match.group(1)
-                arp_mac_address = match.group(2)
+                if match:
+                    arp_ip_address = match.group(1)
+                    arp_mac_address = match.group(2)
 
-                print("ARP IP Address:", arp_ip_address)
-                print("ARP Mac Address:", arp_mac_address)
-                arp_protocol.add_record(arp_ip_address, arp_mac_address)
+                    print("ARP IP Address:", arp_ip_address)
+                    print("ARP Mac Address:", arp_mac_address)
+                    arp_protocol.add_record(arp_ip_address, arp_mac_address)
 
-                print('\nUPDATED ARP TABLE: ')
-                print(arp_protocol.get_arp_table())
+                    print('\nUPDATED ARP TABLE: ')
+                    print(arp_protocol.get_arp_table())
 
-            else:
-                print("No match found.")
-                return False
-        
-        #Handling a ARP broadcast message received
-        elif re.match(arp_request_pattern, received_message):
-            handle_arp_request(received_message, client)
-        
+                else:
+                    print("No match found.")
+                    return False
+            
+            #Handling a ARP broadcast message received
+            elif re.match(arp_request_pattern, received_message):
+                handle_arp_request(received_message, client)
+
+    except (ConnectionResetError, ConnectionAbortedError):
+        print(f"Connection with {router} closed.")
+        # Need to clear assigned IP address value and send dhcp release to server
+
+    except Exception as e:
+        print(f"Unexpected error 1: {e}")
+
 
 # Gets ethernet data payload to be sent
 def handle_input(arp_protocol):
@@ -185,7 +198,7 @@ time.sleep(1)
 arp_protocol = ARP_Protocol()
 
 try:
-    client1_ip = handle_router_connection()
+    handle_router_connection()
     handle_input(arp_protocol)
 
 except KeyboardInterrupt:
