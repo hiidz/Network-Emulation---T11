@@ -102,12 +102,12 @@ class RouterInterface:
             destination_ip_address = packet['dest']
             print(f"Not intended recipient, will forward based on IP packet: {destination_ip_address}")
 
+            max_arp_retries = 3
+            arp_request_attempt = 1
+
             #Check if IP address is in router network.
             if self.isIPAddressInNetwork(destination_ip_address):
                 print("Destination IP address is in the network. Will transmit as per ARP table.")
-
-                max_arp_retries = 3
-                arp_request_attempt = 1
 
                 #Send out ARP Request if MAC not found
                 while not self.arp_protocol.lookup_arp_table(destination_ip_address) and arp_request_attempt <= max_arp_retries:
@@ -136,24 +136,36 @@ class RouterInterface:
 
                 # Get next hop IP address
                 next_hop_ip = self.routing_table.getNextHopIP(destination_ip_address)
-                print(next_hop_ip)
 
+                #Modify the ip packet back to a string to send out
                 if next_hop_ip:
                     print(f"Routing found, transmitting to the following IP address: {next_hop_ip}")
-                    interface_conn_socket = self.conn_list[next_hop_ip]
 
-                    #Modify the ip packet back to a string to send out
-                    str_packet = str(packet)
-                    str_packet_valid = str_packet.replace(" ", "").replace("'", "")
+                    while not self.arp_protocol.lookup_arp_table(next_hop_ip) and arp_request_attempt <= max_arp_retries:
+                        print("ARP Attempt " + str(arp_request_attempt) + ": No MAC address found in ARP Table so sending out broadcast")
+                        #Create ARP Request Frame
+                        self.arp_protocol.arp_broadcast(next_hop_ip, self.interface_mac, self.interface_ip_address, self.conn_list)
 
-                    interface_conn_socket.send(bytes(str_packet_valid, "utf-8"))
-                    print(f"IP Packet sent to the interface at {next_hop_ip}")
+                        time.sleep(2)
+                        arp_request_attempt += 1
                     
+                    if self.arp_protocol.lookup_arp_table(next_hop_ip):
+                        destination_mac = self.arp_protocol.lookup_arp_table(destination_ip_address)
+                        valid_packet = str(packet).replace("'", "").replace(" ", "")
+                        frame_str = f"{{src:{self.interface_mac},dest:{destination_mac},dataLength:{len(packet['data'])},data:{valid_packet}}}"
+                        print(f"New Frame to be sent: {frame_str}")
+
+                        #Find the socket connected to this IP and send
+                        self.conn_list[destination_ip_address].send(bytes(frame_str, "utf-8"))
+                        print(f'Frame sent to: {destination_ip_address}')
+
+                    else:
+                        print("ARP Request failed to get a MAC address")
+
                 else:
                     # Maybe send msg back to client that no routing is found
                     print(f"No routing can be found for the following IP address: {destination_ip_address}. Packet will be dropped.")
                     return
-            
 
             # # Broadcast to all sockets (incl. connected interfaces if any)
             # for arp_value in self.arp_protocol.get_arp_table().values():
@@ -185,7 +197,8 @@ class RouterInterface:
 
         else:
             print(f"Invalid MAC address. Not intended recipient. Will drop frame...")
-    
+
+
     def handle_arp_request(self, arp_request, conn):
         print("Received a broadcast IP Address")
         #Figure out if the IP address that is being looked for is ours
@@ -207,7 +220,8 @@ class RouterInterface:
         else:
             print("Dropping ARP request")
             return
-    
+
+
     def handle_arp_response(self, arp_response):
         #Handle adding to the ARP table
         payload = arp_response.split('|')[1]
@@ -229,6 +243,7 @@ class RouterInterface:
             print("No match found.")
             return False
 
+
     def handle_gratitous_arp(self, gratitous_arp):
         payload = gratitous_arp.split('|')[1]
         pattern = r"(0x\w{2}) is now at (\w{2})"
@@ -249,10 +264,10 @@ class RouterInterface:
             print("No match found.")
             return False
 
+
     def listen(self, conn, address, listenedIPAddress):
         print(f"Connection from {listenedIPAddress} ({address}) established.")
         self.conn_list[listenedIPAddress] = conn
-
 
         try:
             while True:
@@ -274,7 +289,6 @@ class RouterInterface:
                 
                 elif data.split('|')[0] =='ARP Response':
                     self.handle_arp_response(data)
-                    
 
                 else:
                     print(f"Datagram from {listenedIPAddress}({address}) dropped, invalid format. Data received: {data}")
@@ -312,7 +326,7 @@ class RouterInterface:
                     is_from_router_or_client = split_data[3]
 
 
-                    print(f"Request for interface connection received by {address}... Updating ARP and Routing Table.")
+                    print(f"Request for interface connection received by {address}... Updating Routing Table.")
 
                     # self.arp_protocol.add_record(ip_address_received, mac_address_received, conn)
 
@@ -354,15 +368,16 @@ class RouterInterface:
                             print(f"Assigning and sending client's IP address. Data sending: {responseIPSuccsss}")
                             conn.send(bytes(responseIPSuccsss, "utf-8"))
 
-                            # With client's IP and MAC address available, update ARP table
-                            print("Updating ARP table and deallocating DHCP IP address")
-                            self.arp_protocol.add_record(ip_address, mac_address, conn)
+                            # # With client's IP and MAC address available, update ARP table
+                            # print("Updating ARP table and deallocating DHCP IP address")
+                            # self.arp_protocol.add_record(ip_address, mac_address)
                             break
 
                         else:
                             responseIPFail = f"assigned_ip_address|null"
                             print(f"No IP address available. Data sending: {responseIPFail}")
                             conn.send(bytes(responseIPFail, "utf-8"))
+                            return
 
                 else:
                     print(f"Invalid connection request/response received... Data received: {data}")

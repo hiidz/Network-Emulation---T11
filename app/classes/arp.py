@@ -56,7 +56,7 @@ class ARP_Protocol:
             print("Sender MAC & IP:", (sender_mac, sender_ip))
         else:
             print("Not a valid ARP Request.")
-            return False
+            return False, None, None, None
         
         if ip_looked_for == receiver_ip:
             return True, ip_looked_for, sender_mac, sender_ip

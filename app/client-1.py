@@ -7,13 +7,10 @@ from classes.ethernet_frame import EthernetFrame
 from util import datagram_initialization, arp_request_pattern
 import re 
 
-
-client1_ip = N1_CONFIG["node_ip_address"]
 client1_mac = N1_CONFIG["node_mac"]
 router = (HOST, N1_CONFIG["interface_port"])
 
 conn_list = {}
-
 
 default_routing_table = {
     'default':{
@@ -29,6 +26,49 @@ def handle_router_connection():
     conn_list[R1_1_CONFIG["interface_ip_address"]] = client
     #Maybe add to the routing table instead of having this from the start
     # Need to exchange router and client mac and ip and update/sync ARP tables
+
+    request_connection = f"request_connection|null"
+    print(f"Request connection from interface... Payload: {request_connection}")
+    client.send(bytes(request_connection, "utf-8"))
+    assigned_ip_address = None
+
+    try:
+        while True:
+            data = client.recv(1024)
+            data = data.decode()
+
+            message = data.split('|')[0]
+
+            # Receive response from corresponding interface
+            if message == "request_mac_address":
+                print(f"Received connection response. Payload: {data}")
+                mac_address_response = f"mac_address_response|{client1_mac}"
+                print(f"Sending mac address response. Payload: {mac_address_response}")
+
+                client.send(bytes(mac_address_response, "utf-8"))
+
+            elif message == "assigned_ip_address":
+                assigned_ip_address = data.split('|')[1]
+
+                if assigned_ip_address == 'null':
+                    print("No available IP address received from Router Interface. Connection aborted...")
+                    return
+
+                else:
+                    print(f"Connection success. Assigned the following IP address: {assigned_ip_address}")
+                    assigned_ip_address = assigned_ip_address
+                    break
+
+            else:
+                print(f"Invalid connection response received... Data received: {data}")
+    
+    except (ConnectionResetError, ConnectionAbortedError):
+            print(f"Connection with {router} closed.")
+
+    # Connection is established and now ready to indefinitely listen for incoming packets from connection
+    threading.Thread(target=listen).start()
+    return assigned_ip_address
+
 
 def handle_arp_request(arp_request, conn):
     print("Received a broadcast IP Address")
@@ -53,7 +93,6 @@ def handle_arp_request(arp_request, conn):
         return
 
 
-    
 # Handles incoming connection
 def listen():
     while True:
@@ -144,10 +183,9 @@ client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 time.sleep(1)
 arp_protocol = ARP_Protocol()
-handle_router_connection()
 
 try:
-    threading.Thread(target = listen).start()
+    client1_ip = handle_router_connection()
     handle_input(arp_protocol)
 
 except KeyboardInterrupt:
