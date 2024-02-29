@@ -303,23 +303,13 @@ class RouterInterface:
                 message = data.split('|')[0]
                 # Connection is from another interface
                 if message == "request_interface_connection":
-                    split_data = data.split('|')
-                    ip_address_received = conn_ip_address = split_data[1]
-                    # mac_address_received = data.split('|')[2]
-                    subnet_mask_received = split_data[2]
-                    is_from_router_or_client = split_data[3]
-
+                    ip_address_received = conn_ip_address = data.split('|')[1]
+                    subnet_mask_received = data.split('|')[2]
 
                     print(f"Request for interface connection received by {address}... Updating Routing Table.")
 
-                    # self.arp_protocol.add_record(ip_address_received, mac_address_received, conn)
-
-                    #Should differentiate router to router interface connection from client to router connection
-
-                    if is_from_router_or_client == 'router':
-                        ipPrefix = ip_address_received[:2+int(subnet_mask_received)]
-                        self.routing_table.add_entry(ipPrefix, ip_address_received)
-                        print(self.routing_table.get_routing_table())
+                    ipPrefix = ip_address_received[:2+int(subnet_mask_received)]
+                    self.routing_table.add_entry(ipPrefix, ip_address_received)
 
                     interface_connection_response = f"interface_connection_response|{self.interface_ip_address}|{self.subnet_mask}"
                     print(f"Sending response payload: {interface_connection_response}")
@@ -387,8 +377,8 @@ class RouterInterface:
 
         try:
             #request_interface_connection | 0x11 | R1
-            # Send connection request to corresponding interface: payload = "request_interface_connection | {ip_address} | {from_client_or_router}" 
-            requestInterfaceConnection = f"request_interface_connection|{self.interface_ip_address}|{self.subnet_mask}|router"
+            # Send connection request to corresponding interface: payload = "request_interface_connection | {ip_address}
+            requestInterfaceConnection = f"request_interface_connection|{self.interface_ip_address}|{self.subnet_mask}"
             conn.send(bytes(requestInterfaceConnection, "utf-8"))
             print(f"Establishing interface connection. Data sending: {requestInterfaceConnection}")
 
