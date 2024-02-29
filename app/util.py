@@ -9,6 +9,7 @@ def datagram_initialization(string):
 
     # Split the string by comma to separate key-value pairs
     pairs = string.split(',')
+    
 
     # Create a dictionary to store the key-value pairs
     result = {}
@@ -28,10 +29,9 @@ def datagram_initialization(string):
 
     return result
 
+
 frame_pattern = r"\{src:[a-zA-Z\d]{2},dest:[a-zA-Z\d]{2},dataLength:\d+,data:.+\}"
 packet_pattern = r"\{src:0x[0-9a-fA-F]+,dest:0x[0-9a-fA-F]+,protocol:\w+,dataLength:\d+,data:.+\}"
-
-
-
-
+arp_request_pattern = r"^Who has IP:*"
+gratitous_arp_pattern = r"^Gratuitous ARP*"
 
