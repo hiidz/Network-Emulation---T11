@@ -21,19 +21,22 @@ R1_2_CONFIG = {
 }
 
 N1_CONFIG = {
-  "node_mac": "N1",
-  "interface_mac": R1_1_CONFIG["interface_mac"], 
-  "interface_port": R1_1_PORT
+    "node_mac": "N1",
+    "interface_mac": R1_1_CONFIG["interface_mac"],
+    "interface_ip": R1_1_CONFIG["interface_ip_address"],
+    "interface_port": R1_1_PORT,
 }
 
 N2_CONFIG = {
-  "node_mac": "N2",
-  "interface_mac": R1_2_CONFIG["interface_mac"],  
-  "interface_port": R1_2_PORT
+    "node_mac": "N2",
+    "interface_mac": R1_2_CONFIG["interface_mac"],
+    "interface_ip": R1_2_CONFIG["interface_ip_address"],
+    "interface_port": R1_2_PORT,
 }
 
 N3_CONFIG = {
-  "node_mac": "N3",
-  "interface_mac": R1_2_CONFIG["interface_mac"], 
-  "interface_port": R1_2_PORT
+    "node_mac": "N3",
+    "interface_mac": R1_2_CONFIG["interface_mac"],
+    "interface_ip": R1_2_CONFIG["interface_ip_address"],
+    "interface_port": R1_2_PORT,
 }
