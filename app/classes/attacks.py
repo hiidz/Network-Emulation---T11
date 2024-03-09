@@ -1,79 +1,82 @@
 import os
+import pyshark
+import json
+from util import datagram_initialization
 
-def print_brk():
-    print('-' * os.get_terminal_size().columns)
 
 class Attacks:
-  is_sniffing = False
-  is_ip_spoofing = False
+    is_sniffing = False
+    capture = None
+    ip_address_sniffed = None
 
-  def show_status(self) -> None:
-    if self.is_sniffing:
-      print("Node sniffing enabled.")
-    else:
-      print("Node sniffing disabled.")
-    if self.is_ip_spoofing:
-      print("Node is spoofing IP.")
-    else:
-      print("Node is not spoofing IP.")
-    print_brk()
-      
+    def sniff_packet_handler(self, pkt):
+        # Extract packet details
+        src_port = pkt[pkt.transport_layer].srcport
+        dst_port = pkt[pkt.transport_layer].dstport
+        protocol = pkt.transport_layer
 
-  def enable_sniffing(self) -> None:
-    self.is_sniffing = True
-    print("Sniffing has been enabled.")
-    print_brk()
+        if dst_port == "8200" or src_port == "8200":
+            if hasattr(pkt, "data"):
+                data = str(pkt.data.data)
+                data = data.replace(":", "")
+                data = bytes.fromhex(data).decode("utf-8")
+            else:
+                data = "no data"
+            if "Who has IP" in data or "Gratuitous ARP" in data:
+                print("PACKET FOUND: It is a ARP request")
+            elif data == "no data":
+                print("PACKET FOUND: No data found")
+            elif "ARP Response" in data:
+                print("PACKET FOUND: ARP response")
+            else:
 
-  def disable_sniffing(self) -> None:
-    self.is_sniffing = False
-    print("Sniffing has been disabled.")
-    print_brk()
-  
-  def enable_ip_spoofing(self) -> None:
-    self.is_ip_spoofing = True
-    print("IP spoofing has been enabled.")
-    print_brk()
+                ip_datagram = data.split("{")[2]
+                attributes = ip_datagram.split(",")
+                src_configured_ip = attributes[0].split(":")[1]
+                dest_configured_ip = attributes[1].split(":")[1]
+                if (
+                    src_configured_ip == self.ip_address_sniffed
+                    or dest_configured_ip == self.ip_address_sniffed
+                ):
+                    print(f"PACKET FOUND: Protocol: {protocol}, Data: {data}")
+                else:
+                    print("Not what we are sniffing for so dropping")
 
-  def disable_ip_spoofing(self) -> None:
-    self.is_ip_spoofing = False
-    print("IP spoofing has been disabled.")
-    print_brk()
+    def enable_sniffing(self):
+        self.is_sniffing = True
+        self.capture = pyshark.LiveCapture(
+            interface="lo0",
+            bpf_filter="port 8200",
+            include_raw=True,
+            use_json=True,
+        )
 
-  def handle_sniffer_input(self, has_top_break: bool = True):
-    if has_top_break:
-      print_brk()
+        print("----Begin sniffing session-----")
+        user_input = input("Please enter which IP address you want to sniff: ")
+        self.ip_address_sniffed = user_input
+        print(
+            f"\n---Begin sniffing packets with IP address {self.ip_address_sniffed}---"
+        )
+        print("Press CTRL+C to end sniffing session")
+        try:
+            for pkt in self.capture.sniff_continuously(packet_count=10):
+                self.sniff_packet_handler(pkt)
+        except KeyboardInterrupt:
+            print("\n----Ended sniffing session-----")
+            self.capture.close()
+        finally:
+            # End the capture session
+            self.capture.close()
 
-    print("Commands to configure sniffer:")
-    print("- (s)tatus \t\t Shows if sniffing has been activated.")
-    print("- (d)isable \t\t Disable sniffing.")
-    print("- (e)nable \t\t Enable sniffing.")
-    print("- (es) \t Enable IP spoofing.")
-    print("- (ds) \t Disable IP spoofing.")
-    print_brk()
+    def handle_sniffer_input(self):
+        print("Commands to configure sniffer:")
+        print("- (e)nable \t\t Enable sniffing.")
 
-    user_input = input("> ")
+        user_input = input("> ")
 
-    if user_input == "status" or user_input == "s":
-      self.show_status()
+        if user_input == "enable" or user_input == "e":
+            self.enable_sniffing()
 
-    elif user_input == "disable" or user_input == "d":
-      self.disable_sniffing()
-
-    elif user_input == "enable" or user_input == "e":
-      self.enable_sniffing()
-    
-    elif user_input == "es":
-      self.enable_ip_spoofing()
-    
-    elif user_input == "ds":
-      self.disable_ip_spoofing()
-
-    else:
-            print_brk()
+        else:
             print("Commands to configure sniffer:")
-            print("- (s)tatus \t\t Shows if sniffing has been activated.")
-            print("- (d)isable \t\t Disable sniffing.")
             print("- (e)nable \t\t Enable sniffing.")
-            print("- (e)enable (s)poofing \t Enable IP spoofing.")
-            print("- (d)disable (s)poofing \t Disable IP spoofing.")
-            print_brk()
