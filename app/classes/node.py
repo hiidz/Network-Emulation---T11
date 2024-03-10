@@ -3,10 +3,11 @@ import threading
 import time
 from config import *
 from classes.arp import ARP_Protocol
+from classes.dhcpClient import DHCP_Client_Protocol
 from classes.ethernet_frame import EthernetFrame
 from classes.firewall import Firewall
 from classes.attacks import Attacks
-from util import datagram_initialization, arp_request_pattern
+from util import datagram_initialization, arp_request_pattern, arp_response_pattern, dhcp_offer_pattern, dhcp_acknowledgement_pattern
 import re
 
 class Node:
@@ -44,6 +45,7 @@ class Node:
         if is_malicious:
             self.attacks = Attacks()
 
+        self.dhcp_protocol = DHCP_Client_Protocol()
         self.arp_protocol = ARP_Protocol()
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.router = (HOST, router_interface_port)
@@ -54,52 +56,29 @@ class Node:
     def handle_router_connection(self):
         self.client.connect(self.router)
         self.conn_list[self.router_interface_ip] = self.client
-        print(self.client)
-        # Maybe add to the routing table instead of having this from the start
-        # Need to exchange router and client mac and ip and update/sync ARP tables
-
-        request_connection = f"request_connection|null"
-        print(f"Request connection from interface... Payload: {request_connection}")
-        self.client.send(bytes(request_connection, "utf-8"))
-        assigned_ip_address = None
+        hasReceivedIPAddress = False
 
         try:
+            self.arp_protocol.arp_broadcast(self.default_routing_table['default']['gateway'], self.node_mac, '0x00', self.conn_list)
             while True:
                 data = self.client.recv(1024)
-                data = data.decode()
+                data = data.decode("utf-8")
 
-                message = data.split("|")[0]
+                if re.match(arp_response_pattern, data):
+                    self.handle_arp_response(data)
+                    self.dhcp_protocol.discover(self.conn_list, self.node_mac)
 
-                # Receive response from corresponding interface
-                if message == "request_mac_address":
-                    print(f"Received connection response. Payload: {data}")
-                    mac_address_response = f"mac_address_response|{self.node_mac}"
-                    print(
-                        f"Sending mac address response. Payload: {mac_address_response}"
-                    )
-
-                    self.client.send(bytes(mac_address_response, "utf-8"))
-
-                elif message == "assigned_ip_address":
-                    assigned_ip_address = data.split("|")[1]
-
-                    if assigned_ip_address == "null":
-                        print(
-                            "No available IP address received from Router Interface. Connection aborted..."
-                        )
-                        return
-
-                    else:
-                        print(
-                            f"Connection success. Assigned the following IP address: {assigned_ip_address}"
-                        )
-                        self.node_ip = assigned_ip_address
+                elif re.match(dhcp_offer_pattern, data):
+                    hasReceivedIPAddress = self.handle_dhcp_offer(data, self.client)
+                    if not hasReceivedIPAddress:
                         break
 
+                elif re.match(dhcp_acknowledgement_pattern, data):
+                    hasReceivedIPAddress = self.handle_dhcp_acknowledgement(data)
+                    break
+
                 else:
-                    print(
-                        f"Invalid connection response received... Data received: {data}"
-                    )
+                    print(f"NONE, {data}")
 
         except (ConnectionResetError, ConnectionAbortedError):
             print(f"Connection with {self.router_interface} aborted.")
@@ -109,14 +88,46 @@ class Node:
             print(f"Unexpected error 2: {e}")
 
         # Connection is established and now ready to indefinitely listen for incoming packets from connection
-        threading.Thread(target=self.listen).start()
-        return assigned_ip_address
+        if hasReceivedIPAddress:
+            threading.Thread(target=self.listen).start()
+
+    def handle_arp_response(self, arp_response):
+
+        match = re.match(arp_response_pattern, arp_response)
+        arp_ip_address = match.group(1)
+        arp_mac_address = match.group(2)
+
+        print("ARP IP Address:", arp_ip_address)
+        print("ARP Mac Address:", arp_mac_address)
+        self.arp_protocol.add_record(arp_ip_address, arp_mac_address)
+
+        print("\nUPDATED ARP TABLE: ")
+        print(self.arp_protocol.get_arp_table())
+
+    def handle_dhcp_offer(self, dhcp_offer, conn):
+        ip_address_offered = re.match(dhcp_offer_pattern, dhcp_offer).group(1)
+        if ip_address_offered != "null":
+            self.dhcp_protocol.request(conn, ip_address_offered)
+            return True
+        else:
+            print("No IP address available... Connection failed.")
+            return False
+
+    def handle_dhcp_acknowledgement(self, dhcp_acknowledgement):
+        ip_address_assigned = re.match(dhcp_acknowledgement_pattern, dhcp_acknowledgement).group(1)
+
+        if ip_address_assigned != "null":
+            self.node_ip = ip_address_assigned
+            return True
+        else:
+            print("IP address no longer available... Connection failed.")
+            return False
 
     def handle_arp_request(self, arp_request, conn):
         print("Received a broadcast IP Address")
         # Figure out if the IP address that is being looked for is ours
 
-        is_intended_receiver, ip_looked_for, sender_ip, sender_mac = (
+        is_intended_receiver, ip_looked_for, sender_mac, sender_ip = (
             self.arp_protocol.verfiy_arp_request_destination(arp_request, self.node_ip)
         )
         if is_intended_receiver:
@@ -144,26 +155,8 @@ class Node:
                 received_message = received_message.decode("utf-8")
                 print("\nMessage: " + received_message)
 
-                if received_message.split("|")[0] == "ARP Response":
-                    # Handle adding to the ARP table
-                    payload = received_message.split("|")[1]
-                    pattern = r"(0x\w{2}) is at (\w{2})"
-                    match = re.match(pattern, payload)
-
-                    if match:
-                        arp_ip_address = match.group(1)
-                        arp_mac_address = match.group(2)
-
-                        print("ARP IP Address:", arp_ip_address)
-                        print("ARP Mac Address:", arp_mac_address)
-                        self.arp_protocol.add_record(arp_ip_address, arp_mac_address)
-
-                        print("\nUPDATED ARP TABLE: ")
-                        print(self.arp_protocol.get_arp_table())
-
-                    else:
-                        print("No match found.")
-                        return False
+                if re.match(arp_response_pattern, received_message):
+                    self.handle_arp_response(received_message)
 
                 # Handling a ARP broadcast message received
                 elif re.match(arp_request_pattern, received_message):
@@ -189,6 +182,11 @@ class Node:
                 payload = f"{{src:{spoof_ip},dest:{dest_ip},protocol:kill,dataLength:5,data:thisisfromspoofedIP}}"
             elif command_input == "sniff":
                 self.attacks.handle_sniffer_input()
+            elif command_input == "whoami":
+                print(f"Node's IP address is {self.node_ip}")
+                print(f"Node's MAC is {self.node_mac}")
+            elif command_input == "arp":
+                print(self.arp_protocol.get_arp_table())
             else:
                 payload = command_input
             if payload:

@@ -3,9 +3,9 @@ import threading
 from config import HOST
 from classes.arp import ARP_Protocol
 from classes.routing import Routing_Table
-from classes.dhcp import DHCP_Table
+from classes.dhcpServer import DHCP_Server_Protocol
 import re
-from util import datagram_initialization, frame_pattern, packet_pattern, arp_request_pattern, gratitous_arp_pattern
+from util import datagram_initialization, frame_pattern, packet_pattern, arp_request_pattern, gratitous_arp_pattern, dhcp_discover_pattern, dhcp_request_pattern, dhcp_release_pattern, arp_response_pattern
 import time
 
 class RouterInterface:
@@ -19,7 +19,7 @@ class RouterInterface:
     conn_list = None
     arp_protocol = None
     routing_table = None
-    dhcp_table = None
+    dhcp_protocol = None
 
 
     def __init__(self, interface_ip_address, interface_mac, interface_port, subnet_mask, ip_address_available, connected_interface_ip: str = None, connected_interface_port: int = None):
@@ -35,7 +35,7 @@ class RouterInterface:
 
         self.arp_protocol = ARP_Protocol()
         self.routing_table =Routing_Table()
-        self.dhcp_table = DHCP_Table(ip_address_available)
+        self.dhcp_protocol = DHCP_Server_Protocol(ip_address_available)
 
         self.interface_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.interface_socket.bind((HOST, interface_port))
@@ -112,6 +112,10 @@ class RouterInterface:
                     #Create ARP Request Frame
                     self.arp_protocol.arp_broadcast(destination_ip_address, self.interface_mac, self.interface_ip_address, self.conn_list)
 
+                    # Listening logic here for 2 sesconds
+                    
+
+
                     time.sleep(2)
                     arp_request_attempt += 1
                 
@@ -120,10 +124,12 @@ class RouterInterface:
                     valid_packet = str(packet).replace("'", "").replace(" ", "")
                     frame_str = f"{{src:{self.interface_mac},dest:{destination_mac},dataLength:{len(packet['data'])},data:{valid_packet}}}"
                     print(f"New Frame to be sent: {frame_str}")
+                    print("Broadcasting to entire network...")
 
-                    #Find the socket connected to this IP and send
-                    self.conn_list[destination_ip_address].send(bytes(frame_str, "utf-8"))
-                    print(f'Frame sent to: {destination_ip_address}')
+                    # Using unicast to entire network to emulate broadcast
+                    for conn in self.conn_list.values():
+                        conn.send(bytes(frame_str, "utf-8"))
+
                 else:
                     print("ARP Request failed to get a MAC address")
 
@@ -151,11 +157,6 @@ class RouterInterface:
                     print(f"No routing can be found for the following IP address: {destination_ip_address}. Packet will be dropped.")
                     return
 
-            # # Broadcast to all sockets (incl. connected interfaces if any)
-            # for arp_value in self.arp_protocol.get_arp_table().values():
-            #     print(f"Broadcasting to: {arp_value['mac']}")
-            #     arp_value['socket'].send(bytes(frame_str, "utf-8"))
-
 
     def handleEthernetFrame(self, frame_str):
         frame = datagram_initialization(frame_str)
@@ -175,9 +176,10 @@ class RouterInterface:
         elif frame['dest'] == "FF":
             # Broadcast to all sockets in the network (excl. connected interfaces if any)
             print("Broadcast Frame received, will broadcast to all device in the network")
-            for arp_key, arp_value in self.arp_protocol.get_arp_table().items():
-                if self.isIPAddressInNetwork(arp_key):
-                    arp_value['socket'].send(bytes(frame_str, "utf-8"))
+            for ip, conn in self.conn_list.items():
+                if self.isIPAddressInNetwork(ip):
+                    conn.send(bytes(frame_str, "utf-8"))
+            self.handleIPPacket(frame['data'])
 
         else:
             print(f"Invalid MAC address. Not intended recipient. Will drop frame...")
@@ -196,11 +198,13 @@ class RouterInterface:
             print("Sent out ARP Response")
 
             #Update ARP table to store ARP Request
-            print("Updating ARP Table")
-            self.arp_protocol.add_record(sender_ip, sender_mac)
+            # ARP Request is sent before DHCP. So some clients might sent ARP request without valid IP
+            if sender_ip != '0x00':
+                print("Updating ARP Table")
+                self.arp_protocol.add_record(sender_ip, sender_mac)
 
-            print('\nUPDATED ARP TABLE: ')
-            print(self.arp_protocol.get_arp_table())
+                print('\nUPDATED ARP TABLE: ')
+                print(self.arp_protocol.get_arp_table())
         else:
             print("Dropping ARP request")
             return
@@ -218,6 +222,7 @@ class RouterInterface:
 
             print("ARP IP Address:", arp_ip_address)
             print("ARP Mac Address:", arp_mac_address)
+            
             self.arp_protocol.add_record(arp_ip_address, arp_mac_address)
 
             print('\nUPDATED ARP TABLE: ')
@@ -249,6 +254,24 @@ class RouterInterface:
             return False
 
 
+    def handle_dhcp_discover(self, conn, dhcp_discover):
+        print("Send DHCP Offer (return available IP address to be assigned.)")
+        conn_ip_address = self.dhcp_protocol.offer(conn)
+        return conn_ip_address
+
+
+    def handle_dhcp_request(self, conn, dhcp_request):
+        print("Send DHCP Acknowledgement (deallocate DHCP table)")
+        ip_address_requested = re.match(dhcp_request_pattern, dhcp_request).group(1)
+        ip_address_assigned = self.dhcp_protocol.acknowledgement(conn, ip_address_requested)
+        return ip_address_assigned
+
+
+    def handle_dhcp_release(self, dhcp_release):
+        ip_address = re.match(dhcp_release_pattern, dhcp_release).group(1)
+        self.dhcp_protocol.release(ip_address)
+
+
     def listen(self, conn, address, listenedIPAddress):
         print(f"Connection from {listenedIPAddress} ({address}) established.")
         self.conn_list[listenedIPAddress] = conn
@@ -260,19 +283,33 @@ class RouterInterface:
 
                 # Check if the datagram received matches either frame or packet regex pattern
                 if re.match(frame_pattern, data):
-                    self.handleEthernetFrame(data)
+                    print(data)
+                    threading.Thread(target=self.handleEthernetFrame, args=(data,)).start()
+                    # self.handleEthernetFrame(data)
 
                 elif re.match(packet_pattern, data):
-                    self.handleIPPacket(data)
+                    threading.Thread(target=self.handleIPPacket, args=(data,)).start()
+                    # self.handleIPPacket(data)
                 
                 elif re.match(arp_request_pattern, data):
-                    self.handle_arp_request(data, conn)
+                    threading.Thread(target=self.handle_arp_request, args=(data, conn)).start()
+                    # self.handle_arp_request(data, conn)
 
                 elif re.match(gratitous_arp_pattern, data):
-                    self.handle_gratitous_arp(data)
+                    threading.Thread(target=self.handle_gratitous_arp, args=(data,)).start()
+                    # self.handle_gratitous_arp(data)
                 
-                elif data.split('|')[0] =='ARP Response':
-                    self.handle_arp_response(data)
+                elif re.match(arp_response_pattern, data):
+                    threading.Thread(target=self.handle_arp_response, args=(data,)).start()
+                    # self.handle_arp_response(data)
+
+                elif re.match(dhcp_discover_pattern, data):
+                    threading.Thread(target=self.handle_dhcp_discover, args=(conn, data)).start()
+                    # self.handle_dhcp_discover(conn, data)
+
+                elif re.match(dhcp_request_pattern, data):
+                    threading.Thread(target=self.handle_dhcp_request, args=(conn, data,)).start()
+                    # self.handle_dhcp_request(conn, data)
 
                 else:
                     print(f"Datagram from {listenedIPAddress}({address}) dropped, invalid format. Data received: {data}")
@@ -280,11 +317,9 @@ class RouterInterface:
         except (ConnectionResetError, ConnectionAbortedError):
             print(f"Connection with {listenedIPAddress}({address}) closed.")
 
-            # Remove routing and reallocate IP assigned via DHCP
+            # Remove routing and release assigned IP assigned
             self.routing_table.remove_entry(listenedIPAddress)
-            self.dhcp_table.reallocateIP(listenedIPAddress)
-            # # Remove ARP ??? probably should cache
-            # self.arp_protocol.remove_record(listenedIPAddress)
+            self.dhcp_protocol.release(listenedIPAddress)
 
         except Exception as e:
             print(f"Unexpected error 4: {e}")
@@ -292,17 +327,28 @@ class RouterInterface:
 
     # Handle request for connection from other clients and/or interfaces
     def handle_connection(self, conn, address):
-        conn_ip_address = None
+        conn_ip_address = False
 
         try:
-            hasReceivedConnectionRequest = False
             while True:
                 data = conn.recv(1024)
                 data = data.decode()
-
                 message = data.split('|')[0]
-                # Connection is from another interface
-                if message == "request_interface_connection":
+
+                if re.match(arp_request_pattern, data):
+                    self.handle_arp_request(data, conn)
+
+                elif re.match(dhcp_discover_pattern, data):
+                    conn_ip_address = self.handle_dhcp_discover(conn, data)
+                    if not conn_ip_address:
+                        break
+
+                elif re.match(dhcp_request_pattern, data):
+                    conn_ip_address = self.handle_dhcp_request(conn, data)
+                    break
+
+                # To be changed to RIP protocol
+                elif message == "request_interface_connection":
                     ip_address_received = conn_ip_address = data.split('|')[1]
                     subnet_mask_received = data.split('|')[2]
 
@@ -317,47 +363,12 @@ class RouterInterface:
 
                     break
 
-                # Client send request to establish connection
-                elif message == "request_connection":
-                    print(f"Request for connection received by {address}.") 
-
-                    # Interface send request to client's for their MAC address
-                    requestMACAddress = "request_mac_address|null"
-                    print(f"Requesting for client's MAC address. Data sending: {requestMACAddress}")
-                    conn.send(bytes(requestMACAddress, "utf-8"))
-
-                    hasReceivedConnectionRequest = True
-
-                # Client replies request for MAC address
-                elif message == "mac_address_response":
-                    if hasReceivedConnectionRequest == True:
-                        mac_address = data.split('|')[1]
-                        print(f"Client's MAC address received: {mac_address}")
-
-                        # Obtain available IP address and send it to client
-                        ip_address = conn_ip_address = self.dhcp_table.get_available_ip_address()
-
-                        if ip_address:
-                            responseIPSuccsss = f"assigned_ip_address|{ip_address}"
-                            print(f"Assigning and sending client's IP address. Data sending: {responseIPSuccsss}")
-                            conn.send(bytes(responseIPSuccsss, "utf-8"))
-
-                            # With client's IP and MAC address available, update ARP table
-                            print("Updating ARP table and deallocating DHCP IP address")
-                            self.arp_protocol.add_record(ip_address, mac_address)
-                            break
-
-                        else:
-                            responseIPFail = f"assigned_ip_address|null"
-                            print(f"No IP address available. Data sending: {responseIPFail}")
-                            conn.send(bytes(responseIPFail, "utf-8"))
-                            return
-
                 else:
-                    print(f"Invalid connection request/response received... Data received: {data}")
+                    print(f"Datagram from {address} dropped, invalid format. Data received: {data}. ")
 
             # Connection is established and now ready to indefinitely listen for incoming packets from connection
-            self.listen(conn, address, conn_ip_address)
+            if conn_ip_address:
+                self.listen(conn, address, conn_ip_address)
     
         except (ConnectionResetError, ConnectionAbortedError):
             print(f"Failure to setup connection with {address}.")
@@ -365,13 +376,14 @@ class RouterInterface:
             # Undo ARP, Routing and DHCP changes
             self.arp_protocol.remove_record(conn_ip_address)
             self.routing_table.remove_entry(conn_ip_address)
-            self.dhcp_table.deallocateIP(conn_ip_address)
+            self.dhcp_protocol.release(conn_ip_address)
 
         except Exception as e:
             print(f"Unexpected error 6: {e}")
 
 
     # Initiate connection with another interface
+    # To be changed to RIP protocol
     def setup_interface_connection(self, conn, address):
         conn_ip_address = None
 
@@ -462,7 +474,7 @@ class RouterInterface:
             elif command_input == "routing":
                 print(self.routing_table.get_routing_table())
             elif command_input == "dhcp":
-                print(self.dhcp_table.get_dhcp_table())
+                print(self.dhcp_protocol.get_dhcp_table())
             elif command_input == "reconnect":
                 if(self.connected_interface_port):
                     print("Attempting to reconnect to connected interface...")
@@ -486,6 +498,7 @@ class RouterInterface:
             self.handle_input()
 
         except KeyboardInterrupt:
+            print(self.conn_list)
             # Close any other connection, including clients and interfaces, if any
             for ip in self.conn_list.keys():
                 self.conn_list[ip].close()
