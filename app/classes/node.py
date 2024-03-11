@@ -8,8 +8,12 @@ from classes.dhcpClient import DHCP_Client_Protocol
 from classes.ethernet_frame import EthernetFrame
 from classes.firewall import Firewall
 from classes.attacks import Attacks
-from util import datagram_initialization, arp_request_pattern, arp_response_pattern, dhcp_offer_pattern, dhcp_acknowledgement_pattern
+from util import datagram_initialization, packet_pattern, frame_pattern, arp_request_pattern, arp_response_pattern, dhcp_offer_pattern, dhcp_acknowledgement_pattern
 import re
+import os
+
+def print_brk():
+    print("-" * os.get_terminal_size().columns)
 
 class Node:
     node_mac = None
@@ -44,8 +48,6 @@ class Node:
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.router = (HOST, self.routing_protocol.get_routing_table()["default"]["port"])
 
-        print(self.router)
-
     # Connects client to router interface 1 and exchange/update arp tables from both side
     def handle_router_connection(self):
         self.client.connect(self.router)
@@ -53,7 +55,10 @@ class Node:
         hasReceivedIPAddress = False
 
         try:
-            self.arp_protocol.arp_broadcast(self.routing_protocol.get_routing_table()["default"]["gateway"], self.node_mac, '0x00', self.conn_list)
+            # Should there be a mac address broadcast at the start
+            # self.arp_protocol.arp_broadcast(self.default_routing_table['default']['gateway'], self.node_mac, '0x00', self.conn_list)
+            self.dhcp_protocol.discover(self.conn_list, self.node_mac)
+
             while True:
                 data = self.client.recv(1024)
                 data = data.decode("utf-8")
@@ -140,6 +145,43 @@ class Node:
         else:
             print("Dropping ARP request")
 
+    def handle_ip_packet(self, packet_str):
+        packet = datagram_initialization(packet_str)
+
+        # If dest in packet matches router address, router is intended recipient
+        if packet["dest"] == self.node_ip:
+            print(
+                f"IP Packet received. Protocol is: {packet['protocol']}. Payload is: {packet['data']}."
+            )
+            protocol = packet['protocol']
+            if protocol == 'kill':
+                print("Carrying out kill protocol")
+            elif protocol == 'ping':
+                print("Carrying out ping protol")
+            else:
+                print("Invalid protocol received")
+
+        else:
+            print("Not intended recipient of IP Packet. Drop IP Packet....")
+        
+
+    def handle_ethernet_frame(self, frame_str):
+        frame = datagram_initialization(frame_str)
+
+        # Check if intended recipient, or if broadcast ethernet, else forward based on IP packet
+        if frame["dest"] == self.node_mac:
+            print(f"Ethernet Frame received: {frame}")
+
+            # Process Ethernet frame and its IP packet if required
+            if re.match(packet_pattern, frame["data"]):
+                print("Extracting IP packet in payload...")
+                self.handle_ip_packet(frame["data"])
+
+            else:
+                print(f"Payload is: {frame['data']}.")
+        else:
+            print(f"Not intended recipient. Will drop frame...")
+
     # Handles incoming connection
     def listen(self):
         print(f"Connection from {self.router}) established.")
@@ -156,6 +198,11 @@ class Node:
                 elif re.match(arp_request_pattern, received_message):
                     self.handle_arp_request(received_message, self.client)
 
+                elif re.match(frame_pattern, received_message):
+                    self.handle_ethernet_frame(received_message)
+                else:
+                    print("Recieved invalid payload. Dropping...")
+
         except (ConnectionResetError, ConnectionAbortedError):
             print(f"Connection with {self.router} closed.")
             # Need to clear assigned IP address value and send dhcp release to server
@@ -168,21 +215,41 @@ class Node:
         while True:
             command_input = input()
             payload = None
-            if command_input == "firewall":
+            if command_input == "firewall" and self.has_firewall:
                 self.firewall.handle_firewall_input()
-            elif command_input == "spoof":
+            elif command_input == "spoof" and self.is_malicious:
                 spoof_ip = input("Enter IP address to spoof: ")
                 dest_ip = input("Enter destination address: ")
                 payload = f"{{src:{spoof_ip},dest:{dest_ip},protocol:kill,dataLength:5,data:thisisfromspoofedIP}}"
-            elif command_input == "sniff":
+            elif command_input == "sniff" and self.is_malicious:
                 self.attacks.handle_sniffer_input()
             elif command_input == "whoami":
                 print(f"Node's IP address is {self.node_ip}")
                 print(f"Node's MAC is {self.node_mac}")
-            elif command_input == "arp":
+            elif command_input == "show arp":
                 print(self.arp_protocol.get_arp_table())
+            elif command_input == 'send data':
+                dest_ip = input("Who do you want to send it to? (IP address): ")
+                protocol = input("Pick one protocol (kill/ ping): ")
+                data = input("Enter the data that you want to enter: ")
+
+                payload = f"{{src:{self.node_ip},dest:{dest_ip},protocol:{protocol},dataLength:{len(data)},data:{data}}}"
+                # payload = command_input
             else:
-                payload = command_input
+                print('INVALID COMMAND')
+                print_brk()
+                print("Valid commands")
+                if self.has_firewall:
+                    print("- firewall \t Configure firewall")
+                if self.is_malicious:
+
+                    print("- spoof \t Send spoofed IP packet")
+                    print("sniff \t Sniff IP packets within a network")
+                print("- whoami \t Show own MAC and IP address")
+                print("- show arp table \t Show ARP table")
+                print("- send data \t Send data to another node or router")
+                print_brk()
+
             if payload:
                 # Getting Destination IP
                 if payload.split("|")[0] == "requestconnection":
@@ -227,7 +294,6 @@ class Node:
                         ethernet_frame.create(self.node_mac, dest_mac, ip_datagram)
                         ethernet_payload = ethernet_frame.convert_to_valid_payload()
                         self.client.send(bytes(ethernet_payload, "utf-8"))
-                        print(self.client)
                         print("\nPayload has been sent")
                     else:
                         print("ARP Request failed to get a MAC address")
