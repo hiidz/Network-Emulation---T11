@@ -2,6 +2,7 @@ import socket
 import threading
 import time
 from config import *
+from classes.rip import RIP_Protocol
 from classes.arp import ARP_Protocol
 from classes.dhcpClient import DHCP_Client_Protocol
 from classes.ethernet_frame import EthernetFrame
@@ -15,25 +16,17 @@ class Node:
     node_ip = None
     router = None
     conn_list = None
-    default_routing_table = None
-    router_interface_ip = None
-    router_interface_port = None
     has_firewall = False
     is_malicious = False
 
     def __init__(
         self,
         node_mac,
-        router_interface_ip,
-        router_interface_port,
         default_routing_table: dict = None,
         has_firewall: bool = False,
         is_malicious: bool = False,
     ):
         self.node_mac = node_mac
-        self.default_routing_table = default_routing_table
-        self.router_interface_ip = router_interface_ip
-        self.router_interface_port = router_interface_port
 
         # List of all socket connections. Will be used to close all active connections upon exit
         self.conn_list = {}
@@ -45,21 +38,22 @@ class Node:
         if is_malicious:
             self.attacks = Attacks()
 
+        self.routing_protocol = RIP_Protocol(default_routing_table)
         self.dhcp_protocol = DHCP_Client_Protocol()
         self.arp_protocol = ARP_Protocol()
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.router = (HOST, router_interface_port)
+        self.router = (HOST, self.routing_protocol.get_routing_table()["default"]["port"])
 
         print(self.router)
 
     # Connects client to router interface 1 and exchange/update arp tables from both side
     def handle_router_connection(self):
         self.client.connect(self.router)
-        self.conn_list[self.router_interface_ip] = self.client
+        self.conn_list[self.routing_protocol.get_routing_table()["default"]["gateway"]] = self.client
         hasReceivedIPAddress = False
 
         try:
-            self.arp_protocol.arp_broadcast(self.default_routing_table['default']['gateway'], self.node_mac, '0x00', self.conn_list)
+            self.arp_protocol.arp_broadcast(self.routing_protocol.get_routing_table()["default"]["gateway"], self.node_mac, '0x00', self.conn_list)
             while True:
                 data = self.client.recv(1024)
                 data = data.decode("utf-8")
@@ -191,7 +185,7 @@ class Node:
                 payload = command_input
             if payload:
                 # Getting Destination IP
-                if payload.split("|")[0] == "request_interface_connection":
+                if payload.split("|")[0] == "requestconnection":
                     self.client.send(bytes(payload, "utf-8"))
                 elif payload.split("|")[0] == "Gratuitous ARP":
                     self.arp_protocol.gratitous_arp(payload, self.conn_list)
@@ -199,14 +193,9 @@ class Node:
                     ip_datagram = datagram_initialization(payload)
                     destination_ip = ip_datagram["dest"]
 
-                    # Figure out route to take in the routing table but is hardcoded such that if it is found it will take that and if not use the router
-                    if destination_ip in self.default_routing_table.keys():
-                        route_to_take = self.default_routing_table[destination_ip]
-                    else:
-                        route_to_take = self.default_routing_table["default"]
-
-                    route_ip = route_to_take["gateway"]
-
+                    route_ip =self.routing_protocol.getNextHopIP(destination_ip)
+                    if route_ip == None:
+                        route_ip = hex(int(self.routing_protocol.get_routing_table()['default']["gateway"], 16))
                     max_arp_retries = 3
                     arp_request_attempt = 1
 
@@ -220,6 +209,7 @@ class Node:
                             + ": No MAC address found in ARP Table so sending out broadcast"
                         )
                         # Create ARP Request Frame
+                        print("ROUTE IP:", route_ip)
                         self.arp_protocol.arp_broadcast(
                             route_ip, self.node_mac, self.node_ip, self.conn_list
                         )

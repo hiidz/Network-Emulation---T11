@@ -1,6 +1,7 @@
 import socket
 import threading
 from config import HOST
+from classes.rip import RIP_Protocol
 from classes.arp import ARP_Protocol
 from classes.routing import Routing_Table
 from classes.dhcpServer import DHCP_Server_Protocol
@@ -18,7 +19,6 @@ class RouterInterface:
     subnet_mask = None
     conn_list = None
     arp_protocol = None
-    routing_table = None
     dhcp_protocol = None
 
 
@@ -33,8 +33,8 @@ class RouterInterface:
         # List of all socket connections. Will be used to close all active connections upon exit
         self.conn_list = {}
 
+        self.rip_protocol = RIP_Protocol()
         self.arp_protocol = ARP_Protocol()
-        self.routing_table =Routing_Table()
         self.dhcp_protocol = DHCP_Server_Protocol(ip_address_available)
 
         self.interface_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -42,8 +42,7 @@ class RouterInterface:
 
 
     def isIPAddressInNetwork(self, ip):
-        # offset by 2 because IP address stirng starts with '0x'
-        if ip[:2+self.subnet_mask] == self.interface_ip_address[:2+self.subnet_mask]:
+        if int(ip, 16) & int(self.subnet_mask, 16) == int(self.interface_ip_address, 16) & int(self.subnet_mask, 16):
             return True
         else:
             return False
@@ -112,10 +111,6 @@ class RouterInterface:
                     #Create ARP Request Frame
                     self.arp_protocol.arp_broadcast(destination_ip_address, self.interface_mac, self.interface_ip_address, self.conn_list)
 
-                    # Listening logic here for 2 sesconds
-                    
-
-
                     time.sleep(2)
                     arp_request_attempt += 1
                 
@@ -138,24 +133,24 @@ class RouterInterface:
                 print("Destination IP address is not in the network. Will look up routing table...")
 
                 # Get next hop IP address
-                next_hop_ip = self.routing_table.getNextHopIP(destination_ip_address)
+                next_hop_ip = self.rip_protocol.getNextHopIP(destination_ip_address)
+                if next_hop_ip == None:
+                    if 'default' in self.rip_protocol.get_routing_table():
+                        next_hop_ip = self.rip_protocol.get_routing_table()['default']["gateway"]
+                    else:
+                        print(f"No routing can be found for the following IP address: {destination_ip_address}. Packet will be dropped.")
+                        return
                 print(next_hop_ip)
 
-                if next_hop_ip:
-                    print(f"Routing found, transmitting to the following IP address: {next_hop_ip}")
-                    interface_conn_socket = self.conn_list[next_hop_ip]
+                print(f"Routing found, transmitting to the following IP address: {next_hop_ip}")
+                interface_conn_socket = self.conn_list[next_hop_ip]
 
-                    #Modify the ip packet back to a string to send out
-                    str_packet = str(packet)
-                    str_packet_valid = str_packet.replace(" ", "").replace("'", "")
+                #Modify the ip packet back to a string to send out
+                str_packet = str(packet)
+                str_packet_valid = str_packet.replace(" ", "").replace("'", "")
 
-                    interface_conn_socket.send(bytes(str_packet_valid, "utf-8"))
-                    print(f"IP Packet sent to the interface at {next_hop_ip}")
-
-                else:
-                    # Maybe send msg back to client that no routing is found
-                    print(f"No routing can be found for the following IP address: {destination_ip_address}. Packet will be dropped.")
-                    return
+                interface_conn_socket.send(bytes(str_packet_valid, "utf-8"))
+                print(f"IP Packet sent to the interface at {next_hop_ip}")
 
 
     def handleEthernetFrame(self, frame_str):
@@ -276,6 +271,7 @@ class RouterInterface:
         print(f"Connection from {listenedIPAddress} ({address}) established.")
         self.conn_list[listenedIPAddress] = conn
 
+
         try:
             while True:
                 data = conn.recv(1024)
@@ -318,7 +314,7 @@ class RouterInterface:
             print(f"Connection with {listenedIPAddress}({address}) closed.")
 
             # Remove routing and release assigned IP assigned
-            self.routing_table.remove_entry(listenedIPAddress)
+            self.rip_protocol.removeEntry(listenedIPAddress)
             self.dhcp_protocol.release(listenedIPAddress)
 
         except Exception as e:
@@ -354,11 +350,9 @@ class RouterInterface:
 
                     print(f"Request for interface connection received by {address}... Updating Routing Table.")
 
-                    ipPrefix = ip_address_received[:2+int(subnet_mask_received)]
-                    self.routing_table.add_entry(ipPrefix, ip_address_received)
-
                     interface_connection_response = f"interface_connection_response|{self.interface_ip_address}|{self.subnet_mask}"
                     print(f"Sending response payload: {interface_connection_response}")
+                    self.rip_protocol.addEntry(ip_address_received, subnet_mask_received, 1)
                     conn.send(bytes(interface_connection_response, "utf-8"))
 
                     break
@@ -375,7 +369,7 @@ class RouterInterface:
 
             # Undo ARP, Routing and DHCP changes
             self.arp_protocol.remove_record(conn_ip_address)
-            self.routing_table.remove_entry(conn_ip_address)
+            self.rip_protocol.removeEntry(conn_ip_address)
             self.dhcp_protocol.release(conn_ip_address)
 
         except Exception as e:
@@ -407,14 +401,14 @@ class RouterInterface:
                     subnet_mask_received = data.split('|')[2]
 
                     print("Updating Routing Table.")
-                    ipPrefix = ip_address_received[:2+int(subnet_mask_received)]
-                    self.routing_table.add_entry(ipPrefix, ip_address_received)
+                    self.rip_protocol.addEntry(ip_address_received, subnet_mask_received, 1)
 
                     break
 
                 else:
                     print(f"Invalid connection response received... Data received: {data}")
 
+            self.rip_protocol.addEntry(ip_address_received, subnet_mask_received, 1)
             # Connection is established and now ready to indefinitely listen for incoming packets from connection
             self.listen(conn, address, conn_ip_address)
     
@@ -423,7 +417,7 @@ class RouterInterface:
 
             # Remove ARP and routing if needed
             self.arp_protocol.remove_record(conn_ip_address)
-            self.routing_table.remove_entry(conn_ip_address)
+            self.rip_protocol.removeEntry(conn_ip_address)
 
         except Exception as e:
             print(f"Unexpected error 5: {e}")
@@ -472,7 +466,7 @@ class RouterInterface:
             elif command_input == "arp":
                 print(self.arp_protocol.get_arp_table())
             elif command_input == "routing":
-                print(self.routing_table.get_routing_table())
+                print(self.rip_protocol.get_routing_table())
             elif command_input == "dhcp":
                 print(self.dhcp_protocol.get_dhcp_table())
             elif command_input == "reconnect":
