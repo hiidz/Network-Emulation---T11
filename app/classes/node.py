@@ -189,7 +189,7 @@ class Node:
             while True:
                 received_message = self.client.recv(1024)
                 received_message = received_message.decode("utf-8")
-                print("\nMessage: " + received_message)
+                # print("\nMessage: " + received_message)
 
                 if re.match(arp_response_pattern, received_message):
                     self.handle_arp_response(received_message)
@@ -200,8 +200,8 @@ class Node:
 
                 elif re.match(frame_pattern, received_message):
                     self.handle_ethernet_frame(received_message)
-                else:
-                    print("Recieved invalid payload. Dropping...")
+                # else:
+                #     print("Recieved invalid payload. Dropping...")
 
         except (ConnectionResetError, ConnectionAbortedError):
             print(f"Connection with {self.router} closed.")
