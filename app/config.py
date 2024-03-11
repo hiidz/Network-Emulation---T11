@@ -16,8 +16,7 @@ R1_2_CONFIG = {
   "interface_port": R1_2_PORT,
   "subnet_mask": "0xF0",
   "ip_address_available": ['0x2A', '0x2B'],
-  "connected_interface_ip": "0x11",
-  "connected_interface_port": R1_1_PORT
+  "default_routing_table": {"default": {"netmask": "0xF0", "gateway": R1_1_CONFIG["interface_ip_address"], "port": R1_1_CONFIG["interface_port"], "hop": 1}},
 }
 
 N1_CONFIG = {

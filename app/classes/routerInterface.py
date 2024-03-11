@@ -22,18 +22,16 @@ class RouterInterface:
     dhcp_protocol = None
 
 
-    def __init__(self, interface_ip_address, interface_mac, interface_port, subnet_mask, ip_address_available, connected_interface_ip: str = None, connected_interface_port: int = None):
+    def __init__(self, interface_ip_address, interface_mac, interface_port, subnet_mask, ip_address_available, default_routing_table: dict = {}):
         self.interface_ip_address = interface_ip_address
         self.interface_mac = interface_mac
         self.interface_port = interface_port
-        self.connected_interface_port = connected_interface_port
         self.subnet_mask = subnet_mask
-        self.connected_interface_ip = connected_interface_ip
 
         # List of all socket connections. Will be used to close all active connections upon exit
         self.conn_list = {}
 
-        self.rip_protocol = RIP_Protocol()
+        self.rip_protocol = RIP_Protocol(default_routing_table)
         self.arp_protocol = ARP_Protocol()
         self.dhcp_protocol = DHCP_Server_Protocol(ip_address_available)
 
@@ -483,8 +481,9 @@ class RouterInterface:
 
     def start(self):
         # If interface connected to another interface, establish connection request
-        if(self.connected_interface_port):
-            self.connectToInterface(self.connected_interface_port, self.connected_interface_ip)
+        print(self.rip_protocol.get_routing_table())
+        if 'default' in self.rip_protocol.get_routing_table():
+            self.connectToInterface(self.rip_protocol.get_routing_table()['default']['port'], self.rip_protocol.get_routing_table()['default']['gateway'])
 
         try:
             # A thread that will listen for new incoming connections
