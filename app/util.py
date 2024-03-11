@@ -40,3 +40,7 @@ dhcp_discover_pattern = r'^DHCP Client Discover$'
 dhcp_request_pattern = r'^DHCP Client Request\|(0x[a-fA-F0-9]{2})$'
 dhcp_acknowledgement_pattern = r'^DHCP Server Acknowledgement\|(null|(0x[a-fA-F0-9]{2}))$'
 dhcp_release_pattern = r'^DHCP Client Release\|(0x[a-fA-F0-9]{2})$'
+rip_setup_pattern = r'RIP Setup\|(0x[0-9a-fA-F]{2})\|(0x[0-9a-fA-F]{2})'
+rip_request_pattern = "RIP Request"
+rip_response_pattern = r"RIP Response\|(.*)$"
+rip_entry_pattern = r"netmask:(?P<netmask>0x[0-9a-fA-F]+),gateway:(?P<gateway>0x[0-9a-fA-F]+),hop:(?P<hop>\d+)"
