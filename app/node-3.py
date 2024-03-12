@@ -4,7 +4,7 @@ from config import N3_CONFIG
 node_3 = Node(
     N3_CONFIG["node_mac"],
     N3_CONFIG["default_routing_table"],
-    N3_CONFIG["default_routing_port"]
+    N3_CONFIG["default_routing_port"],
     has_firewall=True
 )
 

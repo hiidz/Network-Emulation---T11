@@ -158,6 +158,11 @@ class Node:
     def handle_ip_packet(self, packet_str):
         packet = datagram_initialization(packet_str)
 
+        src_ip = packet["src"]
+
+        if self.has_firewall and not self.firewall.is_allowed(src_ip):
+            print(f"Packet from {src_ip} filtered and dropped by firewall.")
+
         # If dest in packet matches router address, router is intended recipient
         if packet["dest"] == self.node_ip:
             print(
@@ -242,6 +247,10 @@ class Node:
                 dest_ip = input("Who do you want to send it to? (IP address): ")
                 protocol = input("Pick one protocol (kill/ ping): ")
                 data = input("Enter the data that you want to enter: ")
+
+                if self.has_firewall and not self.firewall.is_allowed(dest_ip):
+                    print(f"{dest_ip} is not included in whitelisting")
+                    break
 
                 payload = f"{{src:{self.node_ip},dest:{dest_ip},protocol:{protocol},dataLength:{len(data)},data:{data}}}"
                 # payload = command_input

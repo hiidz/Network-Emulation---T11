@@ -3,7 +3,11 @@ import os
 
 
 def print_brk():
-    print('-' * os.get_terminal_size().columns)
+    try:
+        columns = os.get_terminal_size().columns
+    except OSError:
+        columns = 80  # Default width if terminal size can't be determined
+    print('-' * columns)
 
 
 def input_ip_sequence(prompt: str) -> str:
@@ -19,6 +23,10 @@ def input_ip_sequence(prompt: str) -> str:
 class Firewall:
     blacklist: List[str]
     whitelist: List[str]
+    # incoming_blacklist: List[str]
+    # incoming_whitelist: List[str]
+    # outgoing_blacklist: List[str]
+    # outgoing_whitelist: List[str]
     blacklist_disabled: bool
     whitelist_disabled: bool
 
@@ -26,6 +34,10 @@ class Firewall:
             self,
             blacklist: List[str] = [],
             whitelist: List[str] = [],
+            # incoming_blacklist: List[str] = [],
+            # incoming_whitelist: List[str] = [],
+            # outgoing_blacklist: List[str] = [],
+            # outgoing_whitelist: List[str] = [],
             blacklist_disabled: bool = False,
             whitelist_disabled: bool = True,
     ):
@@ -109,62 +121,62 @@ class Firewall:
             return False
         return True
 
-    def handle_whitelist_firewall_input(self, device: str, has_top_break: bool = True):
-        if has_top_break:
-            print_brk()
-
-        print("Commands to configure firewall:")
-        print("- w -list \t\t View the current whitelist for this node.")
-        print("- w -add \t\t Add a node to the whitelist.")
-        print("- w -remove \t\t Remove a node from the whitelist.")
-        print("- w -off \t Disable firewall.")
-        print("- w -on \t Enable firewall.")
-        print_brk()
-
-        user_input = input("> ")
-        if user_input == "w -list":
-            print(f"Current whitelisted IPs: {self.get_whitelist()}.")
-            print_brk()
-
-        elif user_input == "w -add":
-            ip_to_add = input_ip_sequence("What is the value of the IP you wish to add to whitelist?\n> ")
-            self.add_to_whitelist(ip_to_add)
-
-        elif user_input == "w -remove":
-            ip_to_add = input_ip_sequence("What is the value of the IP you wish to remove from whitelist?\n> ")
-            self.remove_from_whitelist(ip_to_add)
-
-        elif user_input == "w -off":
-            self.disable_whitelist()
-
-        elif user_input == "w -on":
-            self.enable_whitelist()
-
-        else:
-            print_brk()
-            print("Unidentified command. Please use a registered command...")
-            print("Commands to configure firewall:")
-            print("- w -list \t\t View the current whitelist for this node.")
-            print("- w -add \t\t Add a node to the whitelist.")
-            print("- w -remove \t\t Remove a node from the whitelist.")
-            print("- w -off \t Disable firewall.")
-            print("- w -on \t Enable firewall.")
-            print_brk()
+    # def handle_whitelist_firewall_input(self, device: str, has_top_break: bool = True):
+    #     if has_top_break:
+    #         print_brk()
+    #
+    #     print("Command list for firewall:")
+    #     print("- w -list \t\t View the current whitelist for this node.")
+    #     print("- w -add \t\t Add a node to the whitelist.")
+    #     print("- w -remove \t\t Remove a node from the whitelist.")
+    #     print("- w -off \t Disable firewall.")
+    #     print("- w -on \t Enable firewall.")
+    #     print_brk()
+    #
+    #     user_input = input("> ")
+    #     if user_input == "w -list":
+    #         print(f"Current whitelisted IPs: {self.get_whitelist()}.")
+    #         print_brk()
+    #
+    #     elif user_input == "w -add":
+    #         ip_to_add = input_ip_sequence("What is the value of the IP you wish to add to whitelist?\n> ")
+    #         self.add_to_whitelist(ip_to_add)
+    #
+    #     elif user_input == "w -remove":
+    #         ip_to_add = input_ip_sequence("What is the value of the IP you wish to remove from whitelist?\n> ")
+    #         self.remove_from_whitelist(ip_to_add)
+    #
+    #     elif user_input == "w -off":
+    #         self.disable_whitelist()
+    #
+    #     elif user_input == "w -on":
+    #         self.enable_whitelist()
+    #
+    #     else:
+    #         print_brk()
+    #         print("Invalid command.")
+    #         print("Command list for firewall:")
+    #         print("- w -list \t\t View the current whitelist for this node.")
+    #         print("- w -add \t\t Add a node to the whitelist.")
+    #         print("- w -remove \t\t Remove a node from the whitelist.")
+    #         print("- w -off \t Disable firewall.")
+    #         print("- w -on \t Enable firewall.")
+    #         print_brk()
 
     def handle_firewall_input(self, has_top_break: bool = True):
         if has_top_break:
             print_brk()
 
-        print("Commands to configure firewall:")
-        print("- s \t\t Display current status of firewall.")
+        print("Command list for firewall")
+        print("- s \t\t\t Display current status of firewall.")
         print("- b -list \t\t View the current blacklist for this node.")
         print("- b -add \t\t Add a node to the blacklist.")
-        print("- b -remove \t\t Remove a node from the blacklist.")
+        print("- b -remove \t Remove a node from the blacklist.")
         print("- b -on \t\t Enable blacklist firewall.")
         print("- b -off \t\t Disable blacklist firewall.")
         print("- w -list \t\t View the current whitelist for this node.")
         print("- w -add \t\t Add a node to the whitelist.")
-        print("- w -remove \t\t Remove a node from the whitelist.")
+        print("- w -remove \t Remove a node from the whitelist.")
         print("- w -on \t\t Enable whitelist firewall.")
         print("- w -off \t\t Disable whitelist firewall.")
         print_brk()
@@ -214,7 +226,7 @@ class Firewall:
 
         else:
             print_brk()
-            print("Unidentified command. Please use a registered command...")
+            print("Invalid command.")
             print("Commands to configure firewall:")
             print("- w -list \t\t View the current whitelist for this node.")
             print("- w -add \t\t Add a node to the whitelist.")
