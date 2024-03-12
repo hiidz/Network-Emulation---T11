@@ -37,7 +37,7 @@ class RouterInterface:
 
         self.rip_protocol = RIP_Protocol(default_routing_table)
         self.arp_protocol = ARP_Protocol()
-        self.dhcp_protocol = DHCP_Server_Protocol(ip_address_available)
+        self.dhcp_protocol = DHCP_Server_Protocol(ip_address_available, subnet_mask)
 
         self.interface_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.interface_socket.bind((HOST, interface_port))

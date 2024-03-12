@@ -55,6 +55,7 @@ class Node:
         interface_socket.connect((HOST, interfacePort))
         self.conn_list[interfaceIP] = interface_socket
         conn_ip_address = False
+        subnet_mask = False
 
         try:
             # Should there be a mac address broadcast at the start
@@ -70,12 +71,12 @@ class Node:
                     self.dhcp_protocol.discover(self.conn_list, self.node_mac)
 
                 elif re.match(pattern['dhcp_offer'], data):
-                    conn_ip_address = self.handle_dhcp_offer(data, interface_socket)
+                    conn_ip_address, subnet_mask = self.handle_dhcp_offer(data, interface_socket)
                     if not conn_ip_address:
                         break
 
                 elif re.match(pattern['dhcp_acknowledgement'], data):
-                    conn_ip_address = self.handle_dhcp_acknowledgement(data)
+                    conn_ip_address, subnet_mask = self.handle_dhcp_acknowledgement(data)
                     break
 
                 else:
@@ -83,10 +84,10 @@ class Node:
 
             routing_table = self.routing_protocol.get_routing_table()
             if 'default' in routing_table and interfaceIP != routing_table['default']['gateway']:
-                self.routing_protocol.addEntry(interfaceIP, interfaceIP, '0xF0', 1)
+                self.routing_protocol.addEntry(interfaceIP, interfaceIP, subnet_mask, 1)
 
             else:
-                self.routing_protocol.addEntry(interfaceIP, interfaceIP, '0xF0', 1, True)
+                self.routing_protocol.addEntry(interfaceIP, interfaceIP, subnet_mask, 1, True)
 
         except (ConnectionResetError, ConnectionAbortedError):
             print(f"Connection with {interfaceIP} aborted.")
@@ -118,10 +119,11 @@ class Node:
 
         if match:
             ip_address_offered = match.group(1)
+            subnet_mask_received = match.group(2)
             if ip_address_offered != "null":
                 print(f"Offered IP Address: {ip_address_offered}. Sending DHCP Request")
                 self.dhcp_protocol.request(conn, ip_address_offered)
-                return ip_address_offered
+                return ip_address_offered, subnet_mask_received
             else:
                 print("No IP address available... Connection failed.")
                 return False
@@ -132,10 +134,11 @@ class Node:
 
         if match:
             ip_address_assigned = match.group(1)
+            subnet_mask_received = match.group(2)
             if ip_address_assigned != "null":
                 print(f"Assigning IP address: {ip_address_assigned}")
                 self.node_ip = ip_address_assigned
-                return ip_address_assigned
+                return ip_address_assigned, subnet_mask_received
             else:
                 print("IP address no longer available... Connection failed.")
                 return False
