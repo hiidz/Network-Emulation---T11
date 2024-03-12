@@ -21,64 +21,94 @@ def input_ip_sequence(prompt: str) -> str:
 
 
 class Firewall:
-    blacklist: List[str]
-    whitelist: List[str]
-    # incoming_blacklist: List[str]
-    # incoming_whitelist: List[str]
-    # outgoing_blacklist: List[str]
-    # outgoing_whitelist: List[str]
+    incoming_blacklist: List[str]
+    incoming_whitelist: List[str]
+    outgoing_blacklist: List[str]
+    outgoing_whitelist: List[str]
     blacklist_disabled: bool
     whitelist_disabled: bool
 
     def __init__(
             self,
-            blacklist: List[str] = [],
-            whitelist: List[str] = [],
-            # incoming_blacklist: List[str] = [],
-            # incoming_whitelist: List[str] = [],
-            # outgoing_blacklist: List[str] = [],
-            # outgoing_whitelist: List[str] = [],
+            incoming_blacklist: List[str] = [],
+            incoming_whitelist: List[str] = [],
+            outgoing_blacklist: List[str] = [],
+            outgoing_whitelist: List[str] = [],
             blacklist_disabled: bool = False,
             whitelist_disabled: bool = True,
     ):
-        self.blacklist = blacklist
-        self.whitelist = whitelist
+        self.incoming_blacklist = incoming_blacklist
+        self.incoming_whitelist = incoming_whitelist
+        self.outgoing_blacklist = outgoing_blacklist
+        self.outgoing_whitelist = outgoing_whitelist
         self.blacklist_disabled = blacklist_disabled
         self.whitelist_disabled = whitelist_disabled
 
     def __str__(self) -> str:
         return
 
-    def add_to_blacklist(self, ip_add: str):
-        if ip_add not in self.blacklist:
-            self.blacklist.append(ip_add)
-            print(f"IP {ip_add} successfully added to blacklist.")
+    def add_to_incoming_blacklist(self, ip_add: str):
+        if ip_add not in self.incoming_blacklist:
+            self.incoming_blacklist.append(ip_add)
+            print(f"IP {ip_add} successfully added to incoming blacklist.")
         else:
-            print("IP already in blacklist.")
+            print("IP already in incoming blacklist.")
         print_brk()
 
-    def remove_from_blacklist(self, ip_add: str):
-        if ip_add in self.blacklist:
-            self.blacklist.remove(ip_add)
-            print(f"IP {ip_add} removed from blacklist.")
+    def remove_from_incoming_blacklist(self, ip_add: str):
+        if ip_add in self.incoming_blacklist:
+            self.incoming_blacklist.remove(ip_add)
+            print(f"IP {ip_add} removed from incoming blacklist.")
         else:
-            print("IP is currently not in blacklist.")
+            print("IP is currently not in incoming blacklist.")
         print_brk()
 
-    def add_to_whitelist(self, ip_add: str):
-        if ip_add not in self.whitelist:
-            self.whitelist.append(ip_add)
-            print(f"IP {ip_add} successfully added to whitelist.")
+    def add_to_outgoing_blacklist(self, ip_add: str):
+        if ip_add not in self.outgoing_blacklist:
+            self.outgoing_blacklist.append(ip_add)
+            print(f"IP {ip_add} successfully added to outgoing blacklist.")
         else:
-            print("IP already in whitelist.")
+            print("IP already in outgoing blacklist.")
         print_brk()
 
-    def remove_from_whitelist(self, ip_add: str):
-        if ip_add in self.whitelist:
-            self.whitelist.remove(ip_add)
-            print(f"IP {ip_add} removed from whitelist.")
+    def remove_from_outgoing_blacklist(self, ip_add: str):
+        if ip_add in self.outgoing_blacklist:
+            self.outgoing_blacklist.remove(ip_add)
+            print(f"IP {ip_add} removed from outgoing blacklist.")
         else:
-            print("IP is currently not in whitelist.")
+            print("IP is currently not in outgoing blacklist.")
+        print_brk()
+
+    def add_to_incoming_whitelist(self, ip_add: str):
+        if ip_add not in self.incoming_whitelist:
+            self.incoming_whitelist.append(ip_add)
+            print(f"IP {ip_add} successfully added to incoming whitelist.")
+        else:
+            print("IP already in incoming whitelist.")
+        print_brk()
+
+    def remove_from_incoming_whitelist(self, ip_add: str):
+        if ip_add in self.incoming_whitelist:
+            self.incoming_whitelist.remove(ip_add)
+            print(f"IP {ip_add} removed from incoming whitelist.")
+        else:
+            print("IP is currently not in incoming whitelist.")
+        print_brk()
+
+    def add_to_outgoing_whitelist(self, ip_add: str):
+        if ip_add not in self.outgoing_whitelist:
+            self.outgoing_whitelist.append(ip_add)
+            print(f"IP {ip_add} successfully added to outgoing whitelist.")
+        else:
+            print("IP already in outgoing whitelist.")
+        print_brk()
+
+    def remove_from_outgoing_whitelist(self, ip_add: str):
+        if ip_add in self.outgoing_whitelist:
+            self.outgoing_whitelist.remove(ip_add)
+            print(f"IP {ip_add} removed from outgoing whitelist.")
+        else:
+            print("IP is currently not in outgoing whitelist.")
         print_brk()
 
     def is_disabled(self):
@@ -108,60 +138,31 @@ class Firewall:
         print("Blacklisting firewall successfully disabled.")
         print_brk()
 
-    def get_blacklist(self) -> List:
-        return self.blacklist
+    def get_incoming_blacklist(self) -> List:
+        return self.incoming_blacklist
 
-    def get_whitelist(self) -> List:
-        return self.whitelist
+    def get_outgoing_blacklist(self) -> List:
+        return self.outgoing_blacklist
 
-    def is_allowed(self, ip_address: str) -> bool:
-        if not self.blacklist_disabled and ip_address in self.blacklist:
+    def get_incoming_whitelist(self) -> List:
+        return self.incoming_whitelist
+
+    def get_outgoing_whitelist(self) -> List:
+        return self.outgoing_whitelist
+
+    def is_allowed_incoming(self, ip_address: str) -> bool:
+        if not self.blacklist_disabled and ip_address in self.incoming_blacklist:
             return False
-        if not self.whitelist_disabled and ip_address not in self.whitelist:
+        if not self.whitelist_disabled and ip_address not in self.incoming_whitelist:
             return False
         return True
 
-    # def handle_whitelist_firewall_input(self, device: str, has_top_break: bool = True):
-    #     if has_top_break:
-    #         print_brk()
-    #
-    #     print("Command list for firewall:")
-    #     print("- w -list \t\t View the current whitelist for this node.")
-    #     print("- w -add \t\t Add a node to the whitelist.")
-    #     print("- w -remove \t\t Remove a node from the whitelist.")
-    #     print("- w -off \t Disable firewall.")
-    #     print("- w -on \t Enable firewall.")
-    #     print_brk()
-    #
-    #     user_input = input("> ")
-    #     if user_input == "w -list":
-    #         print(f"Current whitelisted IPs: {self.get_whitelist()}.")
-    #         print_brk()
-    #
-    #     elif user_input == "w -add":
-    #         ip_to_add = input_ip_sequence("What is the value of the IP you wish to add to whitelist?\n> ")
-    #         self.add_to_whitelist(ip_to_add)
-    #
-    #     elif user_input == "w -remove":
-    #         ip_to_add = input_ip_sequence("What is the value of the IP you wish to remove from whitelist?\n> ")
-    #         self.remove_from_whitelist(ip_to_add)
-    #
-    #     elif user_input == "w -off":
-    #         self.disable_whitelist()
-    #
-    #     elif user_input == "w -on":
-    #         self.enable_whitelist()
-    #
-    #     else:
-    #         print_brk()
-    #         print("Invalid command.")
-    #         print("Command list for firewall:")
-    #         print("- w -list \t\t View the current whitelist for this node.")
-    #         print("- w -add \t\t Add a node to the whitelist.")
-    #         print("- w -remove \t\t Remove a node from the whitelist.")
-    #         print("- w -off \t Disable firewall.")
-    #         print("- w -on \t Enable firewall.")
-    #         print_brk()
+    def is_allowed_outgoing(self, ip_address: str) -> bool:
+        if not self.blacklist_disabled and ip_address in self.outgoing_blacklist:
+            return False
+        if not self.whitelist_disabled and ip_address not in self.outgoing_whitelist:
+            return False
+        return True
 
     def handle_firewall_input(self, has_top_break: bool = True):
         if has_top_break:
@@ -169,14 +170,14 @@ class Firewall:
 
         print("Command list for firewall")
         print("- s \t\t\t Display current status of firewall.")
-        print("- b -list \t\t View the current blacklist for this node.")
-        print("- b -add \t\t Add a node to the blacklist.")
-        print("- b -remove \t Remove a node from the blacklist.")
+        print("- b -list \t\t View the current incoming/outgoing blacklist for this node.")
+        print("- b -add \t\t Add a node to the incoming/outgoing blacklist.")
+        print("- b -remove \t Remove a node from the incoming/outgoing blacklist.")
         print("- b -on \t\t Enable blacklist firewall.")
         print("- b -off \t\t Disable blacklist firewall.")
-        print("- w -list \t\t View the current whitelist for this node.")
-        print("- w -add \t\t Add a node to the whitelist.")
-        print("- w -remove \t Remove a node from the whitelist.")
+        print("- w -list \t\t View the current incoming/outgoing whitelist for this node.")
+        print("- w -add \t\t Add a node to the incoming/outgoing whitelist.")
+        print("- w -remove \t Remove a node from the incoming/outgoing whitelist.")
         print("- w -on \t\t Enable whitelist firewall.")
         print("- w -off \t\t Disable whitelist firewall.")
         print_brk()
@@ -189,16 +190,38 @@ class Firewall:
             print_brk()
 
         elif user_input == "b -list":
-            print(f"Current blacklisted IPs are: {self.get_blacklist()}.")
+            network_direction = input("Please enter incoming/outgoing: ")
+            if network_direction == "incoming":
+                print(f"Current incoming blacklisted IPs are: {self.get_incoming_blacklist()}.")
+            elif network_direction == "outgoing":
+                print(f"Current outgoing blacklisted IPs are: {self.get_outgoing_blacklist()}.")
+            else:
+                print("Invalid Command.")
             print_brk()
 
         elif user_input == "b -add":
-            ip_to_add = input_ip_sequence("What is the value of the IP you wish to add to blacklist?\n> ")
-            self.add_to_blacklist(ip_to_add)
+            network_direction = input("Please enter incoming/outgoing: ")
+            if network_direction == "incoming":
+                ip_to_add = input_ip_sequence("What is the value of the IP you wish to add to incoming blacklist?\n> ")
+                self.add_to_incoming_blacklist(ip_to_add)
+            elif network_direction == "outgoing":
+                ip_to_add = input_ip_sequence("What is the value of the IP you wish to add to outgoing blacklist?\n> ")
+                self.add_to_outgoing_blacklist(ip_to_add)
+            else:
+                print("Invalid Command.")
 
         elif user_input == "b -remove":
-            ip_to_add = input_ip_sequence("What is the value of the IP you wish to remove from blacklist?\n> ")
-            self.remove_from_blacklist(ip_to_add)
+            network_direction = input("Please enter incoming/outgoing: ")
+            if network_direction == "incoming":
+                ip_to_add = input_ip_sequence("What is the value of the IP you wish to remove from incoming "
+                                              "blacklist?\n> ")
+                self.remove_from_incoming_blacklist(ip_to_add)
+            elif network_direction == "outgoing":
+                ip_to_add = input_ip_sequence("What is the value of the IP you wish to remove from outgoing "
+                                              "blacklist?\n> ")
+                self.remove_from_outgoing_blacklist(ip_to_add)
+            else:
+                print("Invalid Command.")
 
         elif user_input == "b -on":
             self.enable_blacklist()
@@ -207,16 +230,38 @@ class Firewall:
             self.disable_blacklist()
 
         elif user_input == "w -list":
-            print(f"Current whitelisted IPs: {self.get_whitelist()}.")
+            network_direction = input("Please enter incoming/outgoing: ")
+            if network_direction == "incoming":
+                print(f"Current whitelisted IPs: {self.get_incoming_whitelist()}.")
+            elif network_direction == "outgoing":
+                print(f"Current whitelisted IPs: {self.get_outgoing_whitelist()}.")
+            else:
+                print("Invalid Command.")
             print_brk()
 
         elif user_input == "w -add":
-            ip_to_add = input_ip_sequence("What is the value of the IP you wish to add to whitelist?\n> ")
-            self.add_to_whitelist(ip_to_add)
+            network_direction = input("Please enter incoming/outgoing: ")
+            if network_direction == "incoming":
+                ip_to_add = input_ip_sequence("What is the value of the IP you wish to add to incoming whitelist?\n> ")
+                self.add_to_incoming_whitelist(ip_to_add)
+            elif network_direction == "outgoing":
+                ip_to_add = input_ip_sequence("What is the value of the IP you wish to add to outgoing whitelist?\n> ")
+                self.add_to_outgoing_whitelist(ip_to_add)
+            else:
+                print("Invalid Command.")
 
         elif user_input == "w -remove":
-            ip_to_add = input_ip_sequence("What is the value of the IP you wish to remove from whitelist?\n> ")
-            self.remove_from_whitelist(ip_to_add)
+            network_direction = input("Please enter incoming/outgoing: ")
+            if network_direction == "incoming":
+                ip_to_add = input_ip_sequence(
+                    "What is the value of the IP you wish to remove from incoming whitelist?\n> ")
+                self.remove_from_incoming_whitelist(ip_to_add)
+            elif network_direction == "outgoing":
+                ip_to_add = input_ip_sequence(
+                    "What is the value of the IP you wish to remove from outgoing whitelist?\n> ")
+                self.remove_from_outgoing_whitelist(ip_to_add)
+            else:
+                print("Invalid Command.")
 
         elif user_input == "w -on":
             self.enable_whitelist()
@@ -226,11 +271,17 @@ class Firewall:
 
         else:
             print_brk()
-            print("Invalid command.")
-            print("Commands to configure firewall:")
-            print("- w -list \t\t View the current whitelist for this node.")
-            print("- w -add \t\t Add a node to the whitelist.")
-            print("- w -remove \t\t Remove a node from the whitelist.")
-            print("- w -off \t Disable firewall.")
-            print("- w -on \t Enable firewall.")
+            print("Invalid Command.")
+            print("Command list for firewall")
+            print("- s \t\t\t Display current status of firewall.")
+            print("- b -list \t\t View the current incoming/outgoing blacklist for this node.")
+            print("- b -add \t\t Add a node to the incoming/outgoing blacklist.")
+            print("- b -remove \t Remove a node from the incoming/outgoing blacklist.")
+            print("- b -on \t\t Enable blacklist firewall.")
+            print("- b -off \t\t Disable blacklist firewall.")
+            print("- w -list \t\t View the current incoming/outgoing whitelist for this node.")
+            print("- w -add \t\t Add a node to the incoming/outgoing whitelist.")
+            print("- w -remove \t Remove a node from the incoming/outgoing whitelist.")
+            print("- w -on \t\t Enable whitelist firewall.")
+            print("- w -off \t\t Disable whitelist firewall.")
             print_brk()

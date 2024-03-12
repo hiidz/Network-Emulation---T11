@@ -12,8 +12,14 @@ from util import datagram_initialization, pattern
 import re
 import os
 
+
 def print_brk():
-    print("-" * os.get_terminal_size().columns)
+    try:
+        columns = os.get_terminal_size().columns
+    except OSError:
+        columns = 80  # Default width if terminal size can't be determined
+    print('-' * columns)
+
 
 class Node:
     node_mac = None
@@ -160,7 +166,7 @@ class Node:
 
         src_ip = packet["src"]
 
-        if self.has_firewall and not self.firewall.is_allowed(src_ip):
+        if self.has_firewall and not self.firewall.is_allowed_incoming(src_ip):
             print(f"Packet from {src_ip} filtered and dropped by firewall.")
 
         # If dest in packet matches router address, router is intended recipient
@@ -248,8 +254,8 @@ class Node:
                 protocol = input("Pick one protocol (kill/ ping): ")
                 data = input("Enter the data that you want to enter: ")
 
-                if self.has_firewall and not self.firewall.is_allowed(dest_ip):
-                    print(f"{dest_ip} is not included in whitelisting")
+                if self.has_firewall and not self.firewall.is_allowed_outgoing(dest_ip):
+                    print(f"{dest_ip} is not included in outgoing list")
                     break
 
                 payload = f"{{src:{self.node_ip},dest:{dest_ip},protocol:{protocol},dataLength:{len(data)},data:{data}}}"
