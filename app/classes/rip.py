@@ -1,6 +1,6 @@
 import time
 import re
-from util import rip_setup_pattern
+from util import pattern
 
 class RIP_Protocol:
     routing_table = {}
@@ -16,12 +16,15 @@ class RIP_Protocol:
     def setup(self, conn, netmask, ip, isFirstToInitiate):
         setup_payload =  f"RIP Setup|{netmask}|{ip}"
         conn.send(bytes(setup_payload, "utf-8"))
+
         while isFirstToInitiate:
             data = conn.recv(1024)
             data = data.decode()
-            if re.match(rip_setup_pattern, data):
-                subnet_mask_received = re.match(rip_setup_pattern, data).group(1)
-                ip_address_received = re.match(rip_setup_pattern, data).group(2)
+
+            match = re.match(pattern['rip_setup'], data)
+            if match:
+                subnet_mask_received = match.group(1)
+                ip_address_received = match.group(2)
                 return ip_address_received, subnet_mask_received
 
 
@@ -57,12 +60,17 @@ class RIP_Protocol:
         best_match = None
         best_hop = float('inf')
 
-        for gateway, info in self.routing_table.items():
-            prefix = hex(int(info["gateway"], 16) & int(info["netmask"], 16)).rstrip('0')
+        for key, route in self.routing_table.items():
+            prefix = None
+            if key == 'default':
+                prefix = hex(int(route['gateway'], 16) & int(route["netmask"], 16)).rstrip('0')
+            else:
+                prefix = hex(int(key, 16) & int(route["netmask"], 16)).rstrip('0')
+
             if ip.startswith(prefix):
-                if len(prefix) > max_length and info["hop"] < best_hop:
+                if len(prefix) > max_length and route["hop"] < best_hop:
                     max_length = len(prefix)
-                    best_match = gateway
-                    best_hop = info["hop"]
+                    best_match = route["gateway"]
+                    best_hop = route["hop"]
         
         return best_match

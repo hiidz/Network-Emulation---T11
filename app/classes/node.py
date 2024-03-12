@@ -8,7 +8,7 @@ from classes.dhcpClient import DHCP_Client_Protocol
 from classes.ethernet_frame import EthernetFrame
 from classes.firewall import Firewall
 from classes.attacks import Attacks
-from util import datagram_initialization, packet_pattern, frame_pattern, arp_request_pattern, arp_response_pattern, dhcp_offer_pattern, dhcp_acknowledgement_pattern
+from util import datagram_initialization, pattern
 import re
 import os
 
@@ -27,6 +27,7 @@ class Node:
         self,
         node_mac,
         default_routing_table: dict = None,
+        default_routing_port = None,
         has_firewall: bool = False,
         is_malicious: bool = False,
     ):
@@ -46,7 +47,7 @@ class Node:
         self.dhcp_protocol = DHCP_Client_Protocol()
         self.arp_protocol = ARP_Protocol()
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.router = (HOST, self.routing_protocol.get_routing_table()["default"]["port"])
+        self.router = (HOST, default_routing_port)
 
     # Connects client to router interface 1 and exchange/update arp tables from both side
     def handle_router_connection(self):
@@ -63,16 +64,16 @@ class Node:
                 data = self.client.recv(1024)
                 data = data.decode("utf-8")
 
-                if re.match(arp_response_pattern, data):
+                if re.match(pattern['arp_response'], data):
                     self.handle_arp_response(data)
                     self.dhcp_protocol.discover(self.conn_list, self.node_mac)
 
-                elif re.match(dhcp_offer_pattern, data):
+                elif re.match(pattern['dhcp_offer'], data):
                     hasReceivedIPAddress = self.handle_dhcp_offer(data, self.client)
                     if not hasReceivedIPAddress:
                         break
 
-                elif re.match(dhcp_acknowledgement_pattern, data):
+                elif re.match(pattern['dhcp_acknowledgement'], data):
                     hasReceivedIPAddress = self.handle_dhcp_acknowledgement(data)
                     break
 
@@ -91,36 +92,45 @@ class Node:
             threading.Thread(target=self.listen).start()
 
     def handle_arp_response(self, arp_response):
+        # Handle adding to the ARP table
+        match = re.match(pattern['arp_response'], arp_response)
 
-        match = re.match(arp_response_pattern, arp_response)
-        arp_ip_address = match.group(1)
-        arp_mac_address = match.group(2)
+        if match:
+            arp_ip_address = match.group('ip_address')
+            arp_mac_address = match.group('mac_address')
 
-        print("ARP IP Address:", arp_ip_address)
-        print("ARP Mac Address:", arp_mac_address)
-        self.arp_protocol.add_record(arp_ip_address, arp_mac_address)
-
-        print("\nUPDATED ARP TABLE: ")
-        print(self.arp_protocol.get_arp_table())
+            print(f"Received ARP Response: {arp_ip_address}, {arp_mac_address}. Will update ARP table...")
+            self.arp_protocol.add_record(arp_ip_address, arp_mac_address)
+            print(self.arp_protocol.get_arp_table())
 
     def handle_dhcp_offer(self, dhcp_offer, conn):
-        ip_address_offered = re.match(dhcp_offer_pattern, dhcp_offer).group(1)
-        if ip_address_offered != "null":
-            self.dhcp_protocol.request(conn, ip_address_offered)
-            return True
-        else:
-            print("No IP address available... Connection failed.")
-            return False
+        print("Received DHCP Offer...")
+        match = re.match(pattern['dhcp_offer'], dhcp_offer)
+
+        if match:
+            ip_address_offered = match.group(1)
+            if ip_address_offered != "null":
+                print(f"Offered IP Address: {ip_address_offered}. Sending DHCP Request")
+                self.dhcp_protocol.request(conn, ip_address_offered)
+                return True
+            else:
+                print("No IP address available... Connection failed.")
+                return False
 
     def handle_dhcp_acknowledgement(self, dhcp_acknowledgement):
-        ip_address_assigned = re.match(dhcp_acknowledgement_pattern, dhcp_acknowledgement).group(1)
+        print("Received DHCP Acknowledgement...")
+        match = re.match(pattern['dhcp_acknowledgement'], dhcp_acknowledgement)
 
-        if ip_address_assigned != "null":
-            self.node_ip = ip_address_assigned
-            return True
-        else:
-            print("IP address no longer available... Connection failed.")
-            return False
+        if match:
+            ip_address_assigned = match.group(1)
+            if ip_address_assigned != "null":
+                print(f"Assigning IP address: {ip_address_assigned}")
+                self.node_ip = ip_address_assigned
+                return True
+            else:
+                print("IP address no longer available... Connection failed.")
+                return False
+
 
     def handle_arp_request(self, arp_request, conn):
         print("Received a broadcast IP Address")
@@ -173,7 +183,7 @@ class Node:
             print(f"Ethernet Frame received: {frame}")
 
             # Process Ethernet frame and its IP packet if required
-            if re.match(packet_pattern, frame["data"]):
+            if re.match(pattern['packet'], frame["data"]):
                 print("Extracting IP packet in payload...")
                 self.handle_ip_packet(frame["data"])
 
@@ -191,14 +201,14 @@ class Node:
                 received_message = received_message.decode("utf-8")
                 # print("\nMessage: " + received_message)
 
-                if re.match(arp_response_pattern, received_message):
+                if re.match(pattern['arp_response'], received_message):
                     self.handle_arp_response(received_message)
 
                 # Handling a ARP broadcast message received
-                elif re.match(arp_request_pattern, received_message):
+                elif re.match(pattern['arp_request'], received_message):
                     self.handle_arp_request(received_message, self.client)
 
-                elif re.match(frame_pattern, received_message):
+                elif re.match(pattern['frame'], received_message):
                     self.handle_ethernet_frame(received_message)
                 # else:
                 #     print("Recieved invalid payload. Dropping...")

@@ -29,18 +29,19 @@ def datagram_initialization(string):
 
     return result
 
-
-frame_pattern = r"\{src:[a-zA-Z\d]{2},dest:[a-zA-Z\d]{2},dataLength:\d+,data:.+\}"
-packet_pattern = r"\{src:0x[0-9a-fA-F]+,dest:0x[0-9a-fA-F]+,protocol:\w+,dataLength:\d+,data:.+\}"
-arp_request_pattern = r"^Who has IP:*"
-arp_response_pattern = r'^ARP Response\|(?P<ip_address>0x[0-9a-fA-F]+) is at (?P<mac_address>[^\s]+)$'
-gratitous_arp_pattern = r"^Gratuitous ARP*"
-dhcp_offer_pattern = r'^DHCP Server Offer\|(null|(0x[a-fA-F0-9]{2}))$'
-dhcp_discover_pattern = r'^DHCP Client Discover$'
-dhcp_request_pattern = r'^DHCP Client Request\|(0x[a-fA-F0-9]{2})$'
-dhcp_acknowledgement_pattern = r'^DHCP Server Acknowledgement\|(null|(0x[a-fA-F0-9]{2}))$'
-dhcp_release_pattern = r'^DHCP Client Release\|(0x[a-fA-F0-9]{2})$'
-rip_setup_pattern = r'RIP Setup\|(0x[0-9a-fA-F]{2})\|(0x[0-9a-fA-F]{2})'
-rip_request_pattern = "RIP Request"
-rip_response_pattern = r"RIP Response\|(.*)$"
-rip_entry_pattern = r"netmask:(?P<netmask>0x[0-9a-fA-F]+),gateway:(?P<gateway>0x[0-9a-fA-F]+),hop:(?P<hop>\d+)"
+pattern = {
+    "frame": r"\{src:[a-zA-Z\d]{2},dest:[a-zA-Z\d]{2},dataLength:\d+,data:.+\}",
+    "packet": r"\{src:0x[0-9a-fA-F]+,dest:0x[0-9a-fA-F]+,protocol:\w+,dataLength:\d+,data:.+\}",
+    "arp_request": r"^Who has IP:*",
+    "arp_response": r'^ARP Response\|(?P<ip_address>0x[0-9a-fA-F]+) is at (?P<mac_address>[^\s]+)$',
+    "gratitous_arp": r'^Gratuitous ARP\|(?P<ip_address>0x[0-9a-fA-F]+) is now at (?P<mac_address>[^\s]+)$',
+    "dhcp_offer": r'^DHCP Server Offer\|(null|(0x[a-fA-F0-9]{2}))$',
+    "dhcp_discover": r'^DHCP Client Discover$',
+    "dhcp_request": r'^DHCP Client Request\|(0x[a-fA-F0-9]{2})$',
+    "dhcp_acknowledgement": r'^DHCP Server Acknowledgement\|(null|(0x[a-fA-F0-9]{2}))$',
+    "dhcp_release": r'^DHCP Client Release\|(0x[a-fA-F0-9]{2})$',
+    "rip_setup": r'RIP Setup\|(0x[0-9a-fA-F]{2})\|(0x[0-9a-fA-F]{2})',
+    "rip_request": "RIP Request",
+    "rip_response": r"RIP Response\|(.*)$",
+    "rip_entry": r'(?P<key>(default|0x[0-9a-fA-F]{2})):{netmask:(?P<netmask>0x[0-9a-fA-F]{2}),gateway:(?P<gateway>0x[0-9a-fA-F]{2}),hop:(?P<hop>\d+)}'
+}
