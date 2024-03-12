@@ -46,14 +46,15 @@ class Node:
         self.routing_protocol = RIP_Protocol(default_routing_table)
         self.dhcp_protocol = DHCP_Client_Protocol()
         self.arp_protocol = ARP_Protocol()
-        self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.router = (HOST, default_routing_port)
 
     # Connects client to router interface 1 and exchange/update arp tables from both side
-    def handle_router_connection(self):
-        self.client.connect(self.router)
-        self.conn_list[self.routing_protocol.get_routing_table()["default"]["gateway"]] = self.client
-        hasReceivedIPAddress = False
+    def handle_router_connection(self, interfacePort, interfaceIP):
+        interface_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        interface_socket.connect((HOST, interfacePort))
+        self.conn_list[interfaceIP] = interface_socket
+        conn_ip_address = False
 
         try:
             # Should there be a mac address broadcast at the start
@@ -61,7 +62,7 @@ class Node:
             self.dhcp_protocol.discover(self.conn_list, self.node_mac)
 
             while True:
-                data = self.client.recv(1024)
+                data = interface_socket.recv(1024)
                 data = data.decode("utf-8")
 
                 if re.match(pattern['arp_response'], data):
@@ -69,27 +70,35 @@ class Node:
                     self.dhcp_protocol.discover(self.conn_list, self.node_mac)
 
                 elif re.match(pattern['dhcp_offer'], data):
-                    hasReceivedIPAddress = self.handle_dhcp_offer(data, self.client)
-                    if not hasReceivedIPAddress:
+                    conn_ip_address = self.handle_dhcp_offer(data, interface_socket)
+                    if not conn_ip_address:
                         break
 
                 elif re.match(pattern['dhcp_acknowledgement'], data):
-                    hasReceivedIPAddress = self.handle_dhcp_acknowledgement(data)
+                    conn_ip_address = self.handle_dhcp_acknowledgement(data)
                     break
 
                 else:
                     print(f"NONE, {data}")
 
+            routing_table = self.routing_protocol.get_routing_table()
+            if 'default' in routing_table and interfaceIP != routing_table['default']['gateway']:
+                self.routing_protocol.addEntry(interfaceIP, interfaceIP, '0xF0', 1)
+
+            else:
+                self.routing_protocol.addEntry(interfaceIP, interfaceIP, '0xF0', 1, True)
+
         except (ConnectionResetError, ConnectionAbortedError):
-            print(f"Connection with {self.router_interface} aborted.")
-            # Need to clear assigned IP address value and send dhcp release to server
+            print(f"Connection with {interfaceIP} aborted.")
+            self.node_ip = None
+            self.dhcp_protocol.release(interface_socket, conn_ip_address)
 
         except Exception as e:
             print(f"Unexpected error 2: {e}")
 
         # Connection is established and now ready to indefinitely listen for incoming packets from connection
-        if hasReceivedIPAddress:
-            threading.Thread(target=self.listen).start()
+        if conn_ip_address:
+            threading.Thread(target=self.listen, args=(self.conn_list[interfaceIP], interfaceIP)).start()
 
     def handle_arp_response(self, arp_response):
         # Handle adding to the ARP table
@@ -112,7 +121,7 @@ class Node:
             if ip_address_offered != "null":
                 print(f"Offered IP Address: {ip_address_offered}. Sending DHCP Request")
                 self.dhcp_protocol.request(conn, ip_address_offered)
-                return True
+                return ip_address_offered
             else:
                 print("No IP address available... Connection failed.")
                 return False
@@ -126,7 +135,7 @@ class Node:
             if ip_address_assigned != "null":
                 print(f"Assigning IP address: {ip_address_assigned}")
                 self.node_ip = ip_address_assigned
-                return True
+                return ip_address_assigned
             else:
                 print("IP address no longer available... Connection failed.")
                 return False
@@ -193,11 +202,11 @@ class Node:
             print(f"Not intended recipient. Will drop frame...")
 
     # Handles incoming connection
-    def listen(self):
+    def listen(self, conn, listenedIP):
         print(f"Connection from {self.router}) established.")
         try:
             while True:
-                received_message = self.client.recv(1024)
+                received_message = conn.recv(1024)
                 received_message = received_message.decode("utf-8")
                 # print("\nMessage: " + received_message)
 
@@ -206,7 +215,7 @@ class Node:
 
                 # Handling a ARP broadcast message received
                 elif re.match(pattern['arp_request'], received_message):
-                    self.handle_arp_request(received_message, self.client)
+                    self.handle_arp_request(received_message, conn)
 
                 elif re.match(pattern['frame'], received_message):
                     self.handle_ethernet_frame(received_message)
@@ -215,7 +224,9 @@ class Node:
 
         except (ConnectionResetError, ConnectionAbortedError):
             print(f"Connection with {self.router} closed.")
-            # Need to clear assigned IP address value and send dhcp release to server
+            self.node_ip = None
+            self.dhcp_protocol.release(conn, listenedIP)
+
 
         except Exception as e:
             print(f"Unexpected error 1: {e}")
@@ -245,6 +256,14 @@ class Node:
 
                 payload = f"{{src:{self.node_ip},dest:{dest_ip},protocol:{protocol},dataLength:{len(data)},data:{data}}}"
                 # payload = command_input
+            elif command_input == "routing":
+                print(self.routing_protocol.get_routing_table())
+            elif command_input == "connect":
+                print("Enter Router Port: ")
+                routerPort = input()
+                print("Enter Router IP: ")
+                routerIP = input()
+                self.handle_router_connection(int(routerPort), routerIP)
             else:
                 print('INVALID COMMAND')
                 print_brk()
@@ -262,17 +281,23 @@ class Node:
 
             if payload:
                 # Getting Destination IP
-                if payload.split("|")[0] == "requestconnection":
-                    self.client.send(bytes(payload, "utf-8"))
-                elif payload.split("|")[0] == "Gratuitous ARP":
+                # if payload.split("|")[0] == "requestconnection":
+                #     self.router.send(bytes(payload, "utf-8"))
+                if payload.split("|")[0] == "Gratuitous ARP":
                     self.arp_protocol.gratitous_arp(payload, self.conn_list)
                 else:
                     ip_datagram = datagram_initialization(payload)
                     destination_ip = ip_datagram["dest"]
 
-                    route_ip =self.routing_protocol.getNextHopIP(destination_ip)
-                    if route_ip == None or route_ip == 'default':
-                        route_ip = hex(int(self.routing_protocol.get_routing_table()['default']["gateway"], 16))
+                    route_ip = self.rip_protocol.getNextHopIP(destination_ip)
+                    if route_ip == None:
+                        if 'default' in self.rip_protocol.get_routing_table():
+                            route_ip = self.rip_protocol.get_routing_table()['default']['gateway']
+
+                        else:
+                            print(f"No routing can be found for the following IP address: {destination_ip}. Packet will be dropped.")
+                            return
+
                     max_arp_retries = 3
                     arp_request_attempt = 1
 
@@ -303,7 +328,7 @@ class Node:
 
                         ethernet_frame.create(self.node_mac, dest_mac, ip_datagram)
                         ethernet_payload = ethernet_frame.convert_to_valid_payload()
-                        self.client.send(bytes(ethernet_payload, "utf-8"))
+                        self.conn_list[route_ip].send(bytes(ethernet_payload, "utf-8"))
                         print("\nPayload has been sent")
                     else:
                         print("ARP Request failed to get a MAC address")
@@ -312,8 +337,10 @@ class Node:
 
     def start(self):
         try:
-            self.handle_router_connection()
+            self.handle_router_connection(self.router[1], self.routing_protocol.get_routing_table()['default']['gateway'])
             self.handle_input()
 
         except KeyboardInterrupt:
-            self.client.close()
+            for ip in list(self.conn_list.keys()):
+                self.conn_list[ip].close()
+                del self.conn_list[ip]
