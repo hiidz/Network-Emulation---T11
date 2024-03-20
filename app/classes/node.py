@@ -2,7 +2,7 @@ import socket
 import threading
 import time
 from config import *
-from classes.rip import RIP_Protocol
+from classes.routing import Routing_Protocol
 from classes.arp import ARP_Protocol
 from classes.dhcpClient import DHCP_Client_Protocol
 from classes.ethernet_frame import EthernetFrame
@@ -33,7 +33,6 @@ class Node:
         self,
         node_mac,
         default_routing_table: dict = None,
-        default_routing_port = None,
         has_firewall: bool = False,
         is_malicious: bool = False,
     ):
@@ -49,11 +48,11 @@ class Node:
         if is_malicious:
             self.attacks = Attacks()
 
-        self.routing_protocol = RIP_Protocol(default_routing_table)
+        self.routing_protocol = Routing_Protocol(default_routing_table)
         self.dhcp_protocol = DHCP_Client_Protocol()
         self.arp_protocol = ARP_Protocol()
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.router = (HOST, default_routing_port)
+        self.router = (HOST, default_routing_table['default']['port'])
 
     # Connects client to router interface 1 and exchange/update arp tables from both side
     def handle_router_connection(self):

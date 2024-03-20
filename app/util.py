@@ -40,8 +40,6 @@ pattern = {
     "dhcp_request": r'^DHCP Client Request\|(0x[a-fA-F0-9]{2})$',
     "dhcp_acknowledgement": r'^DHCP Server Acknowledgement\|(null|(0x[a-fA-F0-9]{2}))$',
     "dhcp_release": r'^DHCP Client Release\|(0x[a-fA-F0-9]{2})$',
-    "rip_setup": r'RIP Setup\|(0x[0-9a-fA-F]{2})\|(0x[0-9a-fA-F]{2})',
-    "rip_request": "RIP Request",
-    "rip_response": r"RIP Response\|(.*)$",
-    "rip_entry": r'(?P<key>(default|0x[0-9a-fA-F]{2})):{netmask:(?P<netmask>0x[0-9a-fA-F]{2}),gateway:(?P<gateway>0x[0-9a-fA-F]{2}),hop:(?P<hop>\d+)}'
+    "routing_setup": r'Routing Setup\|(0x[0-9a-fA-F]{2})\|(0x[0-9a-fA-F]{2})',
+    "routing_acknowledgement": r'Routing Acknowledgement\|(True|False)',
 }
