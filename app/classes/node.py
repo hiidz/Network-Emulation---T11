@@ -60,7 +60,7 @@ class Node:
         self.dns_protocol = DNS_Protocol()
         self.dns_ip_address = None
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.router = (HOST, default_routing_table["default"]["port"])
+        self.router = (HOST, default_routing_table['default']['port'])
 
     # Connects client to router interface 1 and exchange/update arp tables from both side
     def handle_router_connection(self):

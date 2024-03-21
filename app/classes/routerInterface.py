@@ -17,7 +17,6 @@ class RouterInterface:
     interface_mac = None
     interface_port = None
     interface_socket = None
-    default_routing_port = None
     # connected_interface_port = None
     # connected_interface_ip = None
     subnet_mask = None
@@ -37,11 +36,11 @@ class RouterInterface:
         default_routing_table: dict = {},
         default_routing_port=None,
     ):
+
         self.interface_ip_address = interface_ip_address
         self.interface_mac = interface_mac
         self.interface_port = interface_port
         self.subnet_mask = subnet_mask
-        self.default_routing_port = default_routing_port
 
         # List of all socket connections. Will be used to close all active connections upon exit
         self.conn_list = {}
@@ -49,6 +48,8 @@ class RouterInterface:
         self.dns_ip_address = None
         self.routing_protocol = Routing_Protocol(default_routing_table)
 
+
+        self.routing_protocol = Routing_Protocol(default_routing_table)
         self.arp_protocol = ARP_Protocol()
         self.dhcp_protocol = DHCP_Server_Protocol(ip_address_available)
 
@@ -143,10 +144,8 @@ class RouterInterface:
                 # Get next hop IP address
                 next_hop_ip = self.routing_protocol.getNextHopIP(destination_ip_address)
                 if next_hop_ip == None:
-                    if "default" in self.routing_protocol.get_routing_table():
-                        next_hop_ip = self.routing_protocol.get_routing_table()[
-                            "default"
-                        ]["gateway"]
+                    if 'default' in self.routing_protocol.get_routing_table():
+                        next_hop_ip = self.routing_protocol.get_routing_table()['default']['gateway']
 
                     else:
                         print(
@@ -301,16 +300,17 @@ class RouterInterface:
             ip_address = match.group(1)
             self.dhcp_protocol.release(ip_address)
 
+
+
     def handle_routing_setup(self, conn, routing_setup, port):
-        match = re.match(pattern["routing_setup"], routing_setup)
+        match = re.match(pattern['routing_setup'], routing_setup)
 
         if match:
             subnet_mask_received = match.group(1)
             ip_address_received = match.group(2)
 
-            self.routing_protocol.addEntry(
-                ip_address_received, ip_address_received, subnet_mask_received, port
-            )
+
+            self.routing_protocol.addEntry(ip_address_received, ip_address_received, subnet_mask_received, port)
             self.routing_protocol.acknowledgement(conn, True)
 
             return ip_address_received
@@ -375,6 +375,9 @@ class RouterInterface:
 
                     print("DNS IP IS: " + self.dns_ip_address)
 
+                else:
+                    print(f"Datagram from {listenedIPAddress}({address}) dropped, invalid format. Data received: {data}")
+
         except (ConnectionResetError, ConnectionAbortedError):
             print(f"Connection with {listenedIPAddress}({address}) closed.")
 
@@ -407,9 +410,7 @@ class RouterInterface:
                     conn_ip_address = self.handle_dhcp_request(conn, data)
                     break
 
-                # elif re.match(pattern["rip_setup"], data):
-                #     conn_ip_address = self.handle_rip_setup(conn, data)
-                #     break
+               
                 elif re.match(pattern["routing_setup"], data):
                     conn_ip_address = self.handle_routing_setup(conn, data, address[1])
                     break
@@ -420,6 +421,7 @@ class RouterInterface:
                     for connection in self.conn_list.keys():
                         self.conn_list[connection].send(bytes(data, "utf-8"))
                     conn_ip_address = None
+
 
                     break
 
@@ -457,6 +459,7 @@ class RouterInterface:
         except Exception as e:
             print(f"Unexpected error 6: {e}")
 
+
     # Initiate connection with another interface
     def setup_interface_connection(self, conn, address, listenedIp):
         conn_ip_address = None
@@ -472,11 +475,13 @@ class RouterInterface:
                 ).start()
 
 
+
         except (ConnectionResetError, ConnectionAbortedError):
             print(f"Failure to setup interface connection with {address}.")
 
             # Remove routing
             self.routing_protocol.removeEntry(conn_ip_address)
+
 
     def multi_listen_handler(self):
         try:
@@ -538,13 +543,7 @@ class RouterInterface:
             elif command_input == "dhcp":
                 print(self.dhcp_protocol.get_dhcp_table())
             elif command_input == "man":
-                print("whoami, arp, routing, dhcp, connect")
-            elif command_input == "connect":
-                print("Enter Router Port: ")
-                routerPort = input()
-                print("Enter Router IP: ")
-                routerIP = input()
-                self.connectToInterface(int(routerPort), routerIP)
+                print("whoami, arp, routing, dhcp")
             else:
                 print("No such command. Try again")
 
@@ -552,7 +551,7 @@ class RouterInterface:
         # If interface connected to another interface, establish connection request
         print(self.routing_protocol.get_routing_table())
         for gateway in self.routing_protocol.get_routing_table().values():
-            self.connectToInterface(gateway["port"], gateway["gateway"])
+            self.connectToInterface(gateway['port'], gateway['gateway'])
 
         try:
             # A thread that will listen for new incoming connections
@@ -564,10 +563,6 @@ class RouterInterface:
             for ip in list(self.conn_list.keys()):
                 self.conn_list[ip].close()
                 del self.conn_list[ip]
-
-            # Close RIP broadcast timer thread. To be improved
-            for thread in self.threads:
-                thread.join()
 
             # Close router interface listening port
             self.interface_socket.close()
