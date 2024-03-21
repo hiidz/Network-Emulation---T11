@@ -1,3 +1,9 @@
+import base64
+import json
+
+from Crypto.Cipher import AES
+
+
 def datagram_initialization(string):
     # Remove the braces from the string
     string = string[1:-1]
@@ -33,14 +39,49 @@ pattern = {
     "frame": r"\{src:[a-zA-Z\d]{2},dest:[a-zA-Z\d]{2},dataLength:\d+,data:.+\}",
     "packet": r"\{src:0x[0-9a-fA-F]+,dest:0x[0-9a-fA-F]+,protocol:\w+,dataLength:\d+,data:.+\}",
     "arp_request": r"^Who has IP:*",
-    "arp_response": r"^ARP Response\|(?P<ip_address>0x[0-9a-fA-F]+) is at (?P<mac_address>[^\s]+)$",
-    "gratitous_arp": r"^Gratuitous ARP\|(?P<ip_address>0x[0-9a-fA-F]+) is now at (?P<mac_address>[^\s]+)$",
-    "dhcp_offer": r"^DHCP Server Offer\|(null|(0x[a-fA-F0-9]{2}))$",
-    "dhcp_discover": r"^DHCP Client Discover\|url:(.*)$",
-    "dhcp_request": r"^DHCP Client Request\|(0x[a-fA-F0-9]{2})$",
-    "dhcp_acknowledgement": r"^DHCP Server Acknowledgement\|ip:(null|(0x[a-fA-F0-9]{2})),dns_ip:(null|(0x[a-fA-F0-9]{2}))$",
-    "dhcp_release": r"^DHCP Client Release\|(0x[a-fA-F0-9]{2})$",
-    "dns_ip_broadcast": r"^DNS IP\|0x[a-fA-F0-9]{2}",
-    "routing_setup": r"Routing Setup\|(0x[0-9a-fA-F]{2})\|(0x[0-9a-fA-F]{2})",
-    "routing_acknowledgement": r"Routing Acknowledgement\|(True|False)",
+    "arp_response": r'^ARP Response\|(?P<ip_address>0x[0-9a-fA-F]+) is at (?P<mac_address>[^\s]+)$',
+    "gratitous_arp": r'^Gratuitous ARP\|(?P<ip_address>0x[0-9a-fA-F]+) is now at (?P<mac_address>[^\s]+)$',
+    "dhcp_offer": r'^DHCP Server Offer\|(null|(0x[a-fA-F0-9]{2}))$',
+    "dhcp_discover": r'^DHCP Client Discover$',
+    "dhcp_request": r'^DHCP Client Request\|(0x[a-fA-F0-9]{2})$',
+    "dhcp_acknowledgement": r'^DHCP Server Acknowledgement\|(null|(0x[a-fA-F0-9]{2}))$',
+    "dhcp_release": r'^DHCP Client Release\|(0x[a-fA-F0-9]{2})$',
+    "rip_setup": r'RIP Setup\|(0x[0-9a-fA-F]{2})\|(0x[0-9a-fA-F]{2})',
+    "rip_request": "RIP Request",
+    "rip_response": r"RIP Response\|(.*)$",
+    "rip_entry": r'(?P<key>(default|0x[0-9a-fA-F]{2})):{netmask:(?P<netmask>0x[0-9a-fA-F]{2}),gateway:(?P<gateway>0x[0-9a-fA-F]{2}),hop:(?P<hop>\d+)}'
 }
+
+
+# Convert dictionary to JSON string
+def dict_to_json_string(data_dict):
+    return json.dumps(data_dict)
+
+
+# Convert JSON string to dictionary
+def json_string_to_dict(json_string):
+    return json.loads(json_string)
+
+
+def encrypt(plaintext, encryption_key):
+    # Pad plaintext to be a multiple of 16 bytes
+    padded_plaintext = plaintext + ' ' * (16 - len(plaintext) % 16)
+    cipher = AES.new(encryption_key, AES.MODE_ECB)
+    encrypted = cipher.encrypt(padded_plaintext)
+    return base64.b64encode(encrypted).decode('utf-8')
+
+
+def decrypt(encrypted_text, encryption_key):
+    decoded_encrypted_text = base64.b64decode(encrypted_text)
+    cipher = AES.new(encryption_key, AES.MODE_ECB)
+    decrypted = cipher.decrypt(decoded_encrypted_text).decode('utf-8')
+    return decrypted.strip()  # Remove padding
+
+
+def is_data_encrypted(data):
+    try:
+        # Try to parse the data as JSON
+        json.loads(data)
+        return False  # Data is JSON, so probably not encrypted
+    except json.JSONDecodeError:
+        return True  # Data is not JSON, could be encrypted

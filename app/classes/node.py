@@ -2,15 +2,15 @@ import socket
 import threading
 import time
 from config import *
-from classes.routing import Routing_Protocol
-from classes.arp import ARP_Protocol
-from classes.dhcpClient import DHCP_Client_Protocol
-from classes.ethernet_frame import EthernetFrame
-from classes.firewall import Firewall
-from classes.attacks import Attacks
-from classes.DNS.dns import DNS_Protocol
+from classes.routing import *
+from classes.arp import *
+from classes.dhcpClient import *
+from classes.ethernet_frame import *
+from classes.firewall import *
+from classes.attacks import *
+from classes.DNS.dns import *
 
-from util import datagram_initialization, pattern
+from util import *
 import re
 import os
 
@@ -32,14 +32,26 @@ class Node:
     is_malicious = False
     url = None
 
+    # VPN related attributes
+    vpn_enabled = false
+    vpn_ip_address = None
+    vpn_gateway = None
+
+    # Encryption Key
+    encryption_key = None
+    cipher = None
+
     def __init__(
-        self,
-        node_mac,
-        default_routing_table: dict = None,
-        # default_routing_port=None,
-        url=None,
-        has_firewall: bool = False,
-        is_malicious: bool = False,
+            self,
+            node_mac,
+            default_routing_table: dict = None,
+            # default_routing_port=None,
+            url=None,
+            has_firewall: bool = False,
+            is_malicious: bool = False,
+            vpn_ip_address=None,
+            vpn_gateway=None,
+            encryption_key=None,
     ):
         self.node_mac = node_mac
         self.url = url
@@ -61,6 +73,16 @@ class Node:
         self.dns_ip_address = None
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.router = (HOST, default_routing_table['default']['port'])
+
+        # Initialize VPN attributes
+        self.vpn_enabled = False
+        self.vpn_ip_address = vpn_ip_address
+        self.vpn_gateway = vpn_gateway
+
+        # Initialize encryption
+        if encryption_key:
+            self.encryption_key = encryption_key
+            self.cipher = AES.new(self.encryption_key, AES.MODE_ECB)
 
     # Connects client to router interface 1 and exchange/update arp tables from both side
     def handle_router_connection(self):
@@ -259,14 +281,35 @@ class Node:
         except Exception as e:
             print(f"Unexpected error 1: {e}")
 
+    def encrypt(self, plaintext):
+        # Pad plaintext to be a multiple of 16 bytes
+        padded_plaintext = plaintext + ' ' * (16 - len(plaintext) % 16)
+        encrypted = self.cipher.encrypt(padded_plaintext)
+        return base64.b64encode(encrypted).decode('utf-8')
+
+    def decrypt(self, encrypted_text):
+        decoded_encrypted_text = base64.b64decode(encrypted_text)
+        decrypted = self.cipher.decrypt(decoded_encrypted_text).decode('utf-8')
+        return decrypted.strip()  # Remove padding
+
+    def toggle_vpn(self):
+        self.vpn_enabled = not self.vpn_enabled
+
+        if self.vpn_enabled:
+            print("Activating VPN...")
+            print(f"New IP address at: {self.vpn_ip_address}")
+        else:
+            print("Deactivating VPN...")
+            print(f"Reverting IP address to: {self.node_ip}")
+
     def send_DNS_request(self, payload, dest_url):
         route_ip = self.send_ARP_request(payload)
 
         max_dns_request_retries = 3
         dns_request_attempt = 1
         while (
-            not self.dns_protocol.lookup_dns_cache(dest_url)
-            and dns_request_attempt <= max_dns_request_retries
+                not self.dns_protocol.lookup_dns_cache(dest_url)
+                and dns_request_attempt <= max_dns_request_retries
         ):
             print(
                 "DNS Attempt "
@@ -309,8 +352,8 @@ class Node:
         arp_request_attempt = 1
 
         while (
-            not self.arp_protocol.lookup_arp_table(route_ip)
-            and arp_request_attempt <= max_arp_retries
+                not self.arp_protocol.lookup_arp_table(route_ip)
+                and arp_request_attempt <= max_arp_retries
         ):
             print(
                 "ARP Attempt "
@@ -345,6 +388,8 @@ class Node:
                 print(f"Node's MAC is {self.node_mac}")
             elif command_input == "show arp":
                 print(self.arp_protocol.get_arp_table())
+            elif command_input == 'toggle vpn':
+                self.toggle_vpn()
             elif command_input == "send data":
                 dest_url = input("Who do you want to send it to? (URL): ")
                 protocol = input("Pick one protocol (kill/ ping): ")
@@ -360,9 +405,6 @@ class Node:
                     dns_data = "DNS_Request|url:" + dest_url
                     payload = f"{{src:{self.node_ip},dest:{self.dns_ip_address},protocol:dns_request,dataLength:{len(dns_data)},data:{dns_data}}}"
 
-                
-
-                # payload = command_input
             else:
                 print("INVALID COMMAND")
                 print_brk()
@@ -370,7 +412,6 @@ class Node:
                 if self.has_firewall:
                     print("- firewall \t Configure firewall")
                 if self.is_malicious:
-
                     print("- spoof \t Send spoofed IP packet")
                     print("sniff \t Sniff IP packets within a network")
                 print("- whoami \t Show own MAC and IP address")
@@ -390,10 +431,22 @@ class Node:
                         dest_ip = self.send_DNS_request(payload, dest_url)
                         payload = f"{{src:{self.node_ip},dest:{dest_ip},protocol:{protocol},dataLength:{len(data)},data:{data}}}"
                         ip_datagram = datagram_initialization(payload)
-                    
+
                     if self.has_firewall and not self.firewall.is_allowed_outgoing(dest_ip):
                         print(f"{dest_ip} is not included in outgoing list")
                         break
+
+                    if self.vpn_enabled:
+                        json_string_ip_datagram = dict_to_json_string(ip_datagram)
+                        encrypted_ip_datagram = self.encrypt(json_string_ip_datagram)
+                        src_ip = self.vpn_ip_address
+                        destination_ip = self.vpn_gateway
+                        protocol = ip_datagram["protocol"]
+                        length = len(encrypted_ip_datagram)
+                        new_payload = f"{{src:{src_ip},dest:{destination_ip},protocol:{protocol},dataLength:{length},data:{encrypted_ip_datagram}}}"
+                        new_ip_datagram = datagram_initialization(new_payload)
+
+                        ip_datagram = new_ip_datagram
 
                     route_ip = self.send_ARP_request(payload)
                     if self.arp_protocol.lookup_arp_table(route_ip):

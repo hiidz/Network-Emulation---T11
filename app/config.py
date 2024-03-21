@@ -59,6 +59,9 @@ N1_CONFIG = {
         }
     },
     "default_routing_port": R1_1_CONFIG["interface_port"],
+    "vpn_interface": "0xA1",
+    "vpn_gateway": "0x11",
+    "encryption_key": "encryption_key_n1"
 }
 
 N2_CONFIG = {
@@ -73,6 +76,9 @@ N2_CONFIG = {
         }
     },
     "default_routing_port": R1_2_CONFIG["interface_port"],
+    "vpn_interface": "0xA2",
+    "vpn_gateway": "0x21",
+    "encryption_key": "encryption_key_n2"
 }
 
 N3_CONFIG = {
@@ -86,6 +92,10 @@ N3_CONFIG = {
             "port": R1_2_CONFIG["interface_port"],
         }
     },
+    "default_routing_port": R1_2_CONFIG["interface_port"],
+    "vpn_interface": "0xA3",
+    "vpn_gateway": "0x21",
+    "encryption_key": "encryption_key_n3"
 }
 
 DNS_SERVER_CONFIG = {
@@ -101,4 +111,10 @@ DNS_SERVER_CONFIG = {
             "hop": 1,
         }
     },
+}
+
+VPN_GATEWAY_CONFIG = {
+    "vpn_table_for_router": {"0x1A": "0xA1", "0x2A": "0xA2", "0x2B": "0xA3"},
+    "vpn_table_for_node": {"R1": "0x11", "R2": "0x21"},
+    "encryption_key_table": {"0xA1": "encryption_key_n1", "0xA2": "encryption_key_n2", "0xA3": "encryption_key_n3"}
 }

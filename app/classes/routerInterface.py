@@ -1,5 +1,7 @@
+import base64
 import socket
 import threading
+
 from config import HOST
 from classes.routing import Routing_Protocol
 from classes.arp import ARP_Protocol
@@ -8,7 +10,7 @@ from classes.dhcpServer import DHCP_Server_Protocol
 import re
 
 # from util import datagram_initialization, frame_pattern, packet_pattern, arp_request_pattern, gratitous_arp_pattern, dhcp_discover_pattern, dhcp_request_pattern, dhcp_release_pattern, arp_response_pattern, rip_request_pattern, rip_response_pattern, rip_setup_pattern, rip_entry_pattern
-from util import datagram_initialization, pattern
+from util import *
 import time
 
 
@@ -26,6 +28,11 @@ class RouterInterface:
     threads = []
     dns_connection = None
 
+    # VPN Table for mapping
+    vpn_table = []
+
+    encryption_key_table = []
+
     def __init__(
         self,
         interface_ip_address,
@@ -35,6 +42,8 @@ class RouterInterface:
         ip_address_available,
         default_routing_table: dict = {},
         default_routing_port=None,
+        vpn_table: dict = {},
+        encryption_key_table: dict = {}
     ):
 
         self.interface_ip_address = interface_ip_address
@@ -48,13 +57,15 @@ class RouterInterface:
         self.dns_ip_address = None
         self.routing_protocol = Routing_Protocol(default_routing_table)
 
-
         self.routing_protocol = Routing_Protocol(default_routing_table)
         self.arp_protocol = ARP_Protocol()
         self.dhcp_protocol = DHCP_Server_Protocol(ip_address_available)
 
         self.interface_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.interface_socket.bind((HOST, interface_port))
+
+        self.vpn_table = vpn_table
+        self.encryption_key_table = encryption_key_table
 
     def isIPAddressInNetwork(self, ip):
         if int(ip, 16) & int(self.subnet_mask, 16) == int(
@@ -69,9 +80,20 @@ class RouterInterface:
 
         # If dest in packet matches router address, router is intended recipient
         if packet["dest"] == self.interface_ip_address:
-            print(
-                f"IP Packet received. Protocol is: {packet['protocol']}. Payload is: {packet['data']}."
-            )
+
+            # Check if data is encrypted
+            data = packet['data']
+            if is_data_encrypted(data):
+                src_ip = packet['src']
+                encryption_key = self.encryption_key_table[src_ip]
+                decrypted_string = decrypt(data, encryption_key)
+                decrypted_ip_datagram = json_string_to_dict(decrypted_string)
+                decrypted_ip_datagram['src'] = src_ip
+                str_packet = str(decrypted_ip_datagram)
+                str_packet_valid = str_packet.replace(" ", "").replace("'", "")
+                self.handleIPPacket(str_packet_valid)
+            else:
+                print(f"IP Packet received. Protocol is: {packet['protocol']}. Payload is: {packet['data']}.")
 
             # Process IP packet if required
             # # if packet['protocol'] == 'kill/arp etc.':
@@ -410,7 +432,7 @@ class RouterInterface:
                     conn_ip_address = self.handle_dhcp_request(conn, data)
                     break
 
-               
+
                 elif re.match(pattern["routing_setup"], data):
                     conn_ip_address = self.handle_routing_setup(conn, data, address[1])
                     break
@@ -481,7 +503,6 @@ class RouterInterface:
 
             # Remove routing
             self.routing_protocol.removeEntry(conn_ip_address)
-
 
     def multi_listen_handler(self):
         try:

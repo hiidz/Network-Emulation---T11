@@ -4,7 +4,7 @@ import time
 from config import *
 from classes.arp import ARP_Protocol
 from classes.ethernet_frame import EthernetFrame
-from util import datagram_initialization, arp_request_pattern
+from util import *
 import re 
 
 client1_mac = N1_CONFIG["node_mac"]
