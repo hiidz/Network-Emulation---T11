@@ -6,8 +6,8 @@ class DHCP_Client_Protocol:
     #         self.dhcp_table[addr] = 1
 
 
-    def discover(self, connected_sockets, client_mac):
-        discover_payload = "DHCP Client Discover"
+    def discover(self, connected_sockets, client_mac, url):
+        discover_payload = f"DHCP Client Discover|url:{url}"
         # {client_mac}|FF|datalength|DHCP Client Discover
         # discover_frame = f"{client_mac}|FF|{len(discover_payload)}|{discover_payload}"
         for conn in connected_sockets.values():
