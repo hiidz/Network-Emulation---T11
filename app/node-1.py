@@ -4,6 +4,6 @@ from config import N1_CONFIG
 node_1 = Node(
     N1_CONFIG["node_mac"],
     N1_CONFIG["default_routing_table"],
-    N1_CONFIG["default_routing_port"]
+    N1_CONFIG["url"]
 )
 node_1.start()
