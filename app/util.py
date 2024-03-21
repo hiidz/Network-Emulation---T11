@@ -85,3 +85,23 @@ def is_data_encrypted(data):
         return False  # Data is JSON, so probably not encrypted
     except json.JSONDecodeError:
         return True  # Data is not JSON, could be encrypted
+
+
+def ensure_bytes(key):
+    """
+    Ensure that the key is in bytes format.
+
+    Args:
+    key (str or bytes): The key to be converted to bytes.
+
+    Returns:
+    bytes: The key in bytes format.
+    """
+    if isinstance(key, str):
+        # Convert string to bytes
+        return key.encode()
+    elif isinstance(key, bytes):
+        # Key is already in bytes
+        return key
+    else:
+        raise TypeError("Key must be a string or bytes, not {}".format(type(key).__name__))

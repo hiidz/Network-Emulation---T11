@@ -33,7 +33,7 @@ class Node:
     url = None
 
     # VPN related attributes
-    vpn_enabled = false
+    vpn_enabled = False
     vpn_ip_address = None
     vpn_gateway = None
 
@@ -81,7 +81,7 @@ class Node:
 
         # Initialize encryption
         if encryption_key:
-            self.encryption_key = encryption_key
+            self.encryption_key = ensure_bytes(encryption_key)
             self.cipher = AES.new(self.encryption_key, AES.MODE_ECB)
 
     # Connects client to router interface 1 and exchange/update arp tables from both side
