@@ -14,6 +14,7 @@ from util import datagram_initialization, pattern
 import re
 import os
 
+
 class DNSServer:
     dns_mac = None
     dns_ip = None
@@ -21,12 +22,12 @@ class DNSServer:
     conn_list = None
 
     def __init__(
-        self,
-        dns_mac,
-        dns_ip,
-        default_routing_table: dict = None,
-        default_routing_port=None,
-        dns_table: dict = None,
+            self,
+            dns_mac,
+            dns_ip,
+            default_routing_table: dict = None,
+            default_routing_port=None,
+            dns_table: dict = None,
     ):
         self.dns_mac = dns_mac
         self.dns_ip = dns_ip
@@ -60,7 +61,7 @@ class DNSServer:
 
                 if re.match(pattern["arp_response"], data):
                     self.handle_arp_response(data)
-                    
+
                 # Handling a ARP broadcast message received
                 elif re.match(pattern["arp_request"], data):
                     threading.Thread(
@@ -83,8 +84,6 @@ class DNSServer:
 
         except Exception as e:
             print(f"Unexpected error 2: {e}")
-
-        
 
     def handle_arp_response(self, arp_response):
         # Handle adding to the ARP table
@@ -300,8 +299,8 @@ class DNSServer:
         arp_request_attempt = 1
 
         while (
-            not self.arp_protocol.lookup_arp_table(route_ip)
-            and arp_request_attempt <= max_arp_retries
+                not self.arp_protocol.lookup_arp_table(route_ip)
+                and arp_request_attempt <= max_arp_retries
         ):
             print(
                 "ARP Attempt "
@@ -317,7 +316,6 @@ class DNSServer:
             arp_request_attempt += 1
 
         return route_ip
-
 
     def start(self):
         try:

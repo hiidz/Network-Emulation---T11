@@ -82,14 +82,19 @@ class RouterInterface:
         if packet["dest"] == self.interface_ip_address:
 
             # Check if data is encrypted
-            data = packet['data']
+            data = packet["data"]
             if is_data_encrypted(data):
-                src_ip = packet['src']
+                print("IT ENTERED HERE")
+                src_ip = packet["src"]
                 str_encryption_key = self.encryption_key_table[src_ip]
                 encryption_key = ensure_bytes(str_encryption_key)
                 decrypted_string = decrypt(data, encryption_key)
+                # decrypted_string = bytes_to_string(decrypted_bytes)
                 decrypted_ip_datagram = json_string_to_dict(decrypted_string)
-                decrypted_ip_datagram['src'] = src_ip
+                decrypted_ip_datagram["src"] = src_ip
+                print(f"{decrypted_ip_datagram['dest']}")
+                print(f"{decrypted_ip_datagram['protocol']}")
+                print(f"{decrypted_ip_datagram['data']}")
                 str_packet = str(decrypted_ip_datagram)
                 str_packet_valid = str_packet.replace(" ", "").replace("'", "")
                 self.handleIPPacket(str_packet_valid)

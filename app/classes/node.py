@@ -1,6 +1,9 @@
 import socket
 import threading
 import time
+
+from Crypto.Util.Padding import unpad, pad
+
 from config import *
 from classes.routing import *
 from classes.arp import *
@@ -207,6 +210,7 @@ class Node:
 
         if self.has_firewall and not self.firewall.is_allowed_incoming(src_ip):
             print(f"Packet from {src_ip} filtered and dropped by firewall.")
+            return
 
         # If dest in packet matches router address, router is intended recipient
         if packet["dest"] == self.node_ip:
@@ -282,15 +286,28 @@ class Node:
             print(f"Unexpected error 1: {e}")
 
     def encrypt(self, plaintext):
+        # Check if the plaintext is already a bytes object
+        if not isinstance(plaintext, bytes):
+            raise TypeError("Plaintext must be bytes")
         # Pad plaintext to be a multiple of 16 bytes
-        padded_plaintext = plaintext + ' ' * (16 - len(plaintext) % 16)
+        padded_plaintext = pad(plaintext, AES.block_size)
         encrypted = self.cipher.encrypt(padded_plaintext)
         return base64.b64encode(encrypted).decode('utf-8')
 
     def decrypt(self, encrypted_text):
+        # Decode the encrypted text from base64
         decoded_encrypted_text = base64.b64decode(encrypted_text)
-        decrypted = self.cipher.decrypt(decoded_encrypted_text).decode('utf-8')
-        return decrypted.strip()  # Remove padding
+
+        # Decrypt the data
+        decrypted = self.cipher.decrypt(decoded_encrypted_text)
+
+        # Remove padding and return the result
+        try:
+            decrypted = unpad(decrypted, AES.block_size, style='pkcs7')
+            return decrypted.decode('utf-8')
+        except (ValueError, KeyError):
+            # Handle decoding error or padding error
+            raise ValueError("Decryption failed. Incorrect padding or encoding.")
 
     def toggle_vpn(self):
         self.vpn_enabled = not self.vpn_enabled
@@ -438,7 +455,8 @@ class Node:
 
                     if self.vpn_enabled:
                         json_string_ip_datagram = dict_to_json_string(ip_datagram)
-                        encrypted_ip_datagram = self.encrypt(json_string_ip_datagram)
+                        bytes_ip_datagram = ensure_bytes(json_string_ip_datagram)
+                        encrypted_ip_datagram = self.encrypt(bytes_ip_datagram)
                         src_ip = self.vpn_ip_address
                         destination_ip = self.vpn_gateway
                         protocol = ip_datagram["protocol"]
