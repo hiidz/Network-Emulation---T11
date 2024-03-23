@@ -84,23 +84,30 @@ class RouterInterface:
 
             # Check if data is encrypted
             data = packet["data"]
-            if is_data_encrypted(data):
-                print("IT ENTERED HERE")
-                src_ip = packet["src"]
-                str_encryption_key = self.encryption_key_table[src_ip]
-                encryption_key = ensure_bytes(str_encryption_key)
-                decrypted_string = decrypt(data, encryption_key)
-                # decrypted_string = bytes_to_string(decrypted_bytes)
-                decrypted_ip_datagram = json_string_to_dict(decrypted_string)
-                decrypted_ip_datagram["src"] = src_ip
-                print(f"{decrypted_ip_datagram['dest']}")
-                print(f"{decrypted_ip_datagram['protocol']}")
-                print(f"{decrypted_ip_datagram['data']}")
-                str_packet = str(decrypted_ip_datagram)
-                str_packet_valid = str_packet.replace(" ", "").replace("'", "")
-                self.handleIPPacket(str_packet_valid)
-            else:
-                print(f"IP Packet received. Protocol is: {packet['protocol']}. Payload is: {packet['data']}.")
+
+            # if is_data_encrypted(data):
+            #     print("IT ENTERED HERE")
+            #     src_ip = packet["src"]
+            #     str_encryption_key = self.encryption_key_table[src_ip]
+            #     encryption_key = ensure_bytes(str_encryption_key)
+            #     decrypted_string = decrypt(data, encryption_key)
+            #     # decrypted_string = bytes_to_string(decrypted_bytes)
+            #     decrypted_ip_datagram = json_string_to_dict(decrypted_string)
+            #     decrypted_ip_datagram["src"] = src_ip
+            #     print(f"{decrypted_ip_datagram['dest']}")
+            #     print(f"{decrypted_ip_datagram['protocol']}")
+            #     print(f"{decrypted_ip_datagram['data']}")
+            #     str_packet = str(decrypted_ip_datagram)
+            #     str_packet_valid = str_packet.replace(" ", "").replace("'", "")
+            #     self.handleIPPacket(str_packet_valid)
+            # else:
+            print(
+                f"IP Packet received. Protocol is: {packet['protocol']}. Payload is: {packet['data']}."
+            )
+            if packet["protocol"] == "close_connection":
+                print("Closing connection...")
+                self.conn_list[packet["src"]].close()
+                del self.conn_list[packet["src"]]
 
             # Process IP packet if required
             # # if packet['protocol'] == 'kill/arp etc.':
@@ -131,8 +138,7 @@ class RouterInterface:
                         + str(arp_request_attempt)
                         + ": No MAC address found in ARP Table so sending out broadcast"
                     )
-                    # print("CONN LIST")
-                    # print(self.conn_list)
+                   
                     # Create ARP Request Frame
                     self.arp_protocol.arp_broadcast(
                         destination_ip_address,
@@ -173,8 +179,10 @@ class RouterInterface:
                 # Get next hop IP address
                 next_hop_ip = self.routing_protocol.getNextHopIP(destination_ip_address)
                 if next_hop_ip == None:
-                    if 'default' in self.routing_protocol.get_routing_table():
-                        next_hop_ip = self.routing_protocol.get_routing_table()['default']['gateway']
+                    if "default" in self.routing_protocol.get_routing_table():
+                        next_hop_ip = self.routing_protocol.get_routing_table()[
+                            "default"
+                        ]["gateway"]
 
                     else:
                         print(
@@ -197,7 +205,7 @@ class RouterInterface:
 
     def handleEthernetFrame(self, frame_str):
         frame = datagram_initialization(frame_str)
-        # print(frame)
+        print(frame)
 
         # Check if intended recipient, or if broadcast ethernet, else forward based on IP packet
         if frame["dest"] == self.interface_mac:
@@ -329,9 +337,8 @@ class RouterInterface:
             ip_address = match.group(1)
             self.dhcp_protocol.release(ip_address)
 
-
     def handle_routing_setup(self, conn, routing_setup, port):
-        match = re.match(pattern['routing_setup'], routing_setup)
+        match = re.match(pattern["routing_setup"], routing_setup)
 
         if match:
             subnet_mask_received = match.group(1)
@@ -375,38 +382,38 @@ class RouterInterface:
 
                 # Check if the datagram received matches either frame or packet regex pattern
                 if re.match(pattern["frame"], data):
-                    threading.Thread(
-                        target=self.handleEthernetFrame, args=(data,)
-                    ).start()
-                    # self.handleEthernetFrame(data)
+                    # threading.Thread(
+                    #     target=self.handleEthernetFrame, args=(data,)
+                    # ).start()
+                    self.handleEthernetFrame(data)
 
                 elif re.match(pattern["packet"], data):
-                    threading.Thread(target=self.handleIPPacket, args=(data,)).start()
-                    # self.handleIPPacket(data)
+                    # threading.Thread(target=self.handleIPPacket, args=(data,)).start()
+                    self.handleIPPacket(data)
 
                 elif re.match(pattern["arp_request"], data):
-                    threading.Thread(
-                        target=self.handle_arp_request, args=(data, conn)
-                    ).start()
-                    # self.handle_arp_request(data, conn)
+                    # threading.Thread(
+                    #     target=self.handle_arp_request, args=(data, conn)
+                    # ).start()
+                    self.handle_arp_request(data, conn)
 
                 elif re.match(pattern["gratitous_arp"], data):
-                    threading.Thread(
-                        target=self.handle_gratitous_arp, args=(data,)
-                    ).start()
-                    # self.handle_gratitous_arp(data)
+                    # threading.Thread(
+                    #     target=self.handle_gratitous_arp, args=(data,)
+                    # ).start()
+                    self.handle_gratitous_arp(data)
 
                 elif re.match(pattern["arp_response"], data):
-                    threading.Thread(
-                        target=self.handle_arp_response, args=(data,)
-                    ).start()
-                    # self.handle_arp_response(data)
+                    # threading.Thread(
+                    #     target=self.handle_arp_response, args=(data,)
+                    # ).start()
+                    self.handle_arp_response(data)
 
                 elif re.match(pattern["dhcp_discover"], data):
-                    threading.Thread(
-                        target=self.handle_dhcp_discover, args=(conn, data)
-                    ).start()
-                    # self.handle_dhcp_discover(conn, data)
+                    # threading.Thread(
+                    #     target=self.handle_dhcp_discover, args=(conn, data)
+                    # ).start()
+                    self.handle_dhcp_discover(conn, data)
 
                 elif re.match(pattern["dhcp_request"], data):
                     threading.Thread(
@@ -423,8 +430,10 @@ class RouterInterface:
 
                     print("DNS IP IS: " + self.dns_ip_address)
 
-                else:
-                    print(f"Datagram from {listenedIPAddress}({address}) dropped, invalid format. Data received: {data}")
+                # else:
+                #     print(
+                #         f"Datagram from {listenedIPAddress}({address}) dropped, invalid format. Data received: {data}"
+                #     )
 
         except (ConnectionResetError, ConnectionAbortedError):
             print(f"Connection with {listenedIPAddress}({address}) closed.")
@@ -432,9 +441,13 @@ class RouterInterface:
             # Remove routing and release assigned IP assigned
             self.routing_protocol.removeEntry(listenedIPAddress)
             self.dhcp_protocol.release(listenedIPAddress)
+            return
 
         except Exception as e:
-            print(f"Unexpected error 4: {e}")
+            if "Bad file descriptor" in str(e):
+                print("Listen stopped")
+            else:
+                print(f"Unexpected error 4: {e}")
 
     # Handle request for connection from other clients and/or interfaces
     def handle_connection(self, conn, address):
@@ -444,7 +457,6 @@ class RouterInterface:
             while True:
                 data = conn.recv(1024)
                 data = data.decode()
-                print(data)
 
                 if re.match(pattern["arp_request"], data):
                     self.handle_arp_request(data, conn)
@@ -457,7 +469,6 @@ class RouterInterface:
                 elif re.match(pattern["dhcp_request"], data):
                     conn_ip_address = self.handle_dhcp_request(conn, data)
                     break
-
 
                 elif re.match(pattern["routing_setup"], data):
                     conn_ip_address = self.handle_routing_setup(conn, data, address[1])
@@ -477,9 +488,10 @@ class RouterInterface:
                     break
 
                 if conn_ip_address:
-                    threading.Thread(
-                        target=self.listen, args=(conn, address, conn_ip_address)
-                    ).start()
+                    # threading.Thread(
+                    #     target=self.listen, args=(conn, address, conn_ip_address, True)
+                    # ).start()
+                    self.listen(conn, address, conn_ip_address, True)
 
                 else:
                     print(
@@ -488,16 +500,18 @@ class RouterInterface:
 
             # Connection is established and now ready to indefinitely listen for incoming packets from connection
             if conn_ip_address:
-                threading.Thread(
-                    target=self.listen, args=(conn, address, conn_ip_address)
-                ).start()
+                # threading.Thread(
+                #     target=self.listen, args=(conn, address, conn_ip_address, True)
+                # ).start()
+                self.listen(conn, address, conn_ip_address, True)
             if (
                 self.dns_ip_address
                 and self.dns_ip_address[:-1] == self.interface_ip_address[0:-1]
             ):
-                threading.Thread(
-                    target=self.listen, args=(conn, address, self.dns_ip_address)
-                ).start()
+                # threading.Thread(
+                #     target=self.listen, args=(conn, address, self.dns_ip_address, False)
+                # ).start()
+                self.listen(conn, address, self.dns_ip_address, False)
 
         except (ConnectionResetError, ConnectionAbortedError):
             print(f"Failure to setup connection with {address}.")
@@ -506,10 +520,13 @@ class RouterInterface:
             self.arp_protocol.remove_record(conn_ip_address)
             self.routing_protocol.removeEntry(conn_ip_address)
             self.dhcp_protocol.release(conn_ip_address)
+            return
 
         except Exception as e:
-            print(f"Unexpected error 6: {e}")
-
+            if "Bad file descriptor" in str(e):
+                print("Handle connection stopped")
+            else:
+                print(f"Unexpected error 6: {e}")
 
     # Initiate connection with another interface
     def setup_interface_connection(self, conn, address, listenedIp):
@@ -521,17 +538,17 @@ class RouterInterface:
             )
             if isSucess:
                 # Connection is established and now ready to indefinitely listen for incoming packets from connection
-                threading.Thread(
-                    target=self.listen, args=(conn, address, listenedIp)
-                ).start()
-
-
+                # threading.Thread(
+                #     target=self.listen, args=(conn, address, listenedIp, True)
+                # ).start()
+                self.listen(conn, address, listenedIp, True)
 
         except (ConnectionResetError, ConnectionAbortedError):
             print(f"Failure to setup interface connection with {address}.")
 
             # Remove routing
             self.routing_protocol.removeEntry(conn_ip_address)
+            return
 
     def multi_listen_handler(self):
         try:
@@ -649,7 +666,7 @@ class RouterInterface:
         # If interface connected to another interface, establish connection request
         print(self.routing_protocol.get_routing_table())
         for gateway in self.routing_protocol.get_routing_table().values():
-            self.connectToInterface(gateway['port'], gateway['gateway'])
+            self.connectToInterface(gateway["port"], gateway["gateway"])
 
         if self.connected_router != None:
             self.connectToRouter(self.connected_router['interface_ip_address'], self.connected_router['interface_port'])
