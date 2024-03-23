@@ -45,22 +45,25 @@ class Node:
     cipher = None
 
     def __init__(
-            self,
-            node_mac,
-            default_routing_table: dict = None,
-            # default_routing_port=None,
-            url=None,
-            has_firewall: bool = False,
-            is_malicious: bool = False,
-            vpn_ip_address=None,
-            vpn_gateway=None,
-            encryption_key=None,
+        self,
+        node_mac,
+        default_routing_table: dict = None,
+        # default_routing_port=None,
+        url=None,
+        has_firewall: bool = False,
+        is_malicious: bool = False,
+        vpn_ip_address=None,
+        vpn_gateway=None,
+        encryption_key=None,
     ):
         self.node_mac = node_mac
         self.url = url
 
         # List of all socket connections. Will be used to close all active connections upon exit
         self.conn_list = {}
+        self.threads = []
+        self.stop_event = threading.Event()  # Event for signaling threads to stop
+
         self.has_firewall = has_firewall
         if has_firewall:
             self.firewall = Firewall()
@@ -75,7 +78,7 @@ class Node:
         self.dns_protocol = DNS_Protocol()
         self.dns_ip_address = None
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.router = (HOST, default_routing_table['default']['port'])
+        self.router = (HOST, default_routing_table["default"]["port"])
 
         # Initialize VPN attributes
         self.vpn_enabled = False
@@ -118,11 +121,17 @@ class Node:
                     hasReceivedIPAddress = self.handle_dhcp_acknowledgement(data)
                     break
 
+                elif re.match(pattern["arp_request"], data):
+                    self.handle_arp_request(data, self.client)
+
+                elif re.match(pattern["frame"], data):
+                    self.handle_ethernet_frame(data)
+
                 else:
                     print(f"NONE, {data}")
 
         except (ConnectionResetError, ConnectionAbortedError):
-            print(f"Connection with {self.router_interface} aborted.")
+            print(f"Connection with {self.router} aborted.")
             # Need to clear assigned IP address value and send dhcp release to server
 
         except Exception as e:
@@ -130,7 +139,9 @@ class Node:
 
         # Connection is established and now ready to indefinitely listen for incoming packets from connection
         if hasReceivedIPAddress:
-            threading.Thread(target=self.listen).start()
+            thread = threading.Thread(target=self.listen)
+            thread.start()
+            self.threads.append(thread)
 
     def handle_arp_response(self, arp_response):
         # Handle adding to the ARP table
@@ -220,8 +231,75 @@ class Node:
             protocol = packet["protocol"]
             if protocol == "kill":
                 print("Carrying out kill protocol")
+
+                payload = f"{{src:{self.node_ip},dest:{self.routing_protocol.get_routing_table()['default']['gateway']},protocol:close_connection,dataLength:0,data:Close connection}}"
+                ip_datagram = datagram_initialization(payload)
+
+                if self.has_firewall and not self.firewall.is_allowed_outgoing(
+                    packet["src"]
+                ):
+                    print(f"{packet['src']} is not included in outgoing list")
+
+                route_ip = self.send_ARP_request(payload)
+                if self.arp_protocol.lookup_arp_table(route_ip):
+                    print("\nMAC Address Found and sending payload")
+
+                    # Package into a ethernet frame
+                    dest_mac = self.arp_protocol.lookup_arp_table(route_ip)
+                    ethernet_frame = EthernetFrame()
+
+                    ethernet_frame.create(self.node_mac, dest_mac, ip_datagram)
+                    ethernet_payload = ethernet_frame.convert_to_valid_payload()
+                    self.client.send(bytes(ethernet_payload, "utf-8"))
+                    print("Connection closure has been sent to router")
+                # self.stop_event.set()
+                # for thread in self.threads:
+                #     if thread != threading.current_thread():
+                #         thread.join()
+
+                self.client.close()
+
+                print("EXITING")
+                os._exit(1)
+
             elif protocol == "ping":
                 print("Carrying out ping protol")
+                payload = f"{{src:{self.node_ip},dest:{packet['src']},protocol:ping_reply,dataLength:{len(packet['data'])},data:{packet['data']}}}"
+                ip_datagram = datagram_initialization(payload)
+
+                if self.has_firewall and not self.firewall.is_allowed_outgoing(
+                    packet["src"]
+                ):
+                    print(f"{packet['src']} is not included in outgoing list")
+
+                if self.vpn_enabled:
+                    json_string_ip_datagram = dict_to_json_string(ip_datagram)
+                    bytes_ip_datagram = ensure_bytes(json_string_ip_datagram)
+                    encrypted_ip_datagram = self.encrypt(bytes_ip_datagram)
+                    src_ip = self.vpn_ip_address
+                    destination_ip = self.vpn_gateway
+                    protocol = ip_datagram["protocol"]
+                    length = len(encrypted_ip_datagram)
+                    new_payload = f"{{src:{src_ip},dest:{destination_ip},protocol:{protocol},dataLength:{length},data:{encrypted_ip_datagram}}}"
+                    new_ip_datagram = datagram_initialization(new_payload)
+
+                    ip_datagram = new_ip_datagram
+
+                route_ip = self.send_ARP_request(payload)
+                if self.arp_protocol.lookup_arp_table(route_ip):
+                    print("\nMAC Address Found and sending payload")
+
+                    # Package into a ethernet frame
+                    dest_mac = self.arp_protocol.lookup_arp_table(route_ip)
+                    ethernet_frame = EthernetFrame()
+
+                    ethernet_frame.create(self.node_mac, dest_mac, ip_datagram)
+                    ethernet_payload = ethernet_frame.convert_to_valid_payload()
+                    self.client.send(bytes(ethernet_payload, "utf-8"))
+                    print("\nPing reply has been sent")
+            elif protocol == "ping_reply":
+                print("\nReceived ping reply")
+                print(f"Reply from {packet['src']}: {packet['data']}")
             elif protocol == "dns_response":
                 packet_data = packet["data"]
                 regex = r"^DNS_Response\|url:(.*),ip:(0x[a-fA-F0-9]+)$"
@@ -232,7 +310,9 @@ class Node:
                 self.dns_protocol.add_dns_record(url, ip)
             elif protocol == "dns_update_success":
                 print("\nSUCCESSFUL DNS REGISTRATION. NOW YOU CAN SEND DATA")
-                threading.Thread(target=self.handle_input).start()
+                thread = threading.Thread(target=self.handle_input)
+                thread.start()
+                self.threads.append(thread)
             else:
                 print("Invalid protocol received")
 
@@ -261,6 +341,8 @@ class Node:
         print(f"Connection from {self.router}) established.")
         try:
             while True:
+                # print("LISTENING")
+
                 received_message = self.client.recv(1024)
                 received_message = received_message.decode("utf-8")
                 # print("\nMessage: " + received_message)
@@ -283,7 +365,9 @@ class Node:
             # Need to clear assigned IP address value and send dhcp release to server
 
         except Exception as e:
+
             print(f"Unexpected error 1: {e}")
+            # raise KeyboardInterrupt
 
     def encrypt(self, plaintext):
         # Check if the plaintext is already a bytes object
@@ -292,7 +376,7 @@ class Node:
         # Pad plaintext to be a multiple of 16 bytes
         padded_plaintext = pad(plaintext, AES.block_size)
         encrypted = self.cipher.encrypt(padded_plaintext)
-        return base64.b64encode(encrypted).decode('utf-8')
+        return base64.b64encode(encrypted).decode("utf-8")
 
     def decrypt(self, encrypted_text):
         # Decode the encrypted text from base64
@@ -303,8 +387,8 @@ class Node:
 
         # Remove padding and return the result
         try:
-            decrypted = unpad(decrypted, AES.block_size, style='pkcs7')
-            return decrypted.decode('utf-8')
+            decrypted = unpad(decrypted, AES.block_size, style="pkcs7")
+            return decrypted.decode("utf-8")
         except (ValueError, KeyError):
             # Handle decoding error or padding error
             raise ValueError("Decryption failed. Incorrect padding or encoding.")
@@ -325,8 +409,8 @@ class Node:
         max_dns_request_retries = 3
         dns_request_attempt = 1
         while (
-                not self.dns_protocol.lookup_dns_cache(dest_url)
-                and dns_request_attempt <= max_dns_request_retries
+            not self.dns_protocol.lookup_dns_cache(dest_url)
+            and dns_request_attempt <= max_dns_request_retries
         ):
             print(
                 "DNS Attempt "
@@ -334,8 +418,6 @@ class Node:
                 + ": No DNS IP found in DNS Cache so sending out DNS Request"
             )
             dns_request_ip_datagram = datagram_initialization(payload)
-            print("ARPPP")
-            print(self.arp_protocol.get_arp_table())
             ethernet_frame = EthernetFrame()
             dest_mac = self.arp_protocol.lookup_arp_table(route_ip)
 
@@ -350,6 +432,9 @@ class Node:
         if self.dns_protocol.lookup_dns_cache(dest_url):
             print("Found in DNS Cache")
             dest_ip = self.dns_protocol.get_dns_cache()[dest_url]
+        else:
+            print("DNS Request failed to get a DNS IP address")
+            dest_ip = None
 
         return dest_ip
 
@@ -369,8 +454,8 @@ class Node:
         arp_request_attempt = 1
 
         while (
-                not self.arp_protocol.lookup_arp_table(route_ip)
-                and arp_request_attempt <= max_arp_retries
+            not self.arp_protocol.lookup_arp_table(route_ip)
+            and arp_request_attempt <= max_arp_retries
         ):
             print(
                 "ARP Attempt "
@@ -405,7 +490,7 @@ class Node:
                 print(f"Node's MAC is {self.node_mac}")
             elif command_input == "show arp":
                 print(self.arp_protocol.get_arp_table())
-            elif command_input == 'toggle vpn':
+            elif command_input == "toggle vpn":
                 self.toggle_vpn()
             elif command_input == "send data":
                 dest_url = input("Who do you want to send it to? (URL): ")
@@ -446,12 +531,19 @@ class Node:
                     ip_datagram = datagram_initialization(payload)
                     if ip_datagram["protocol"] == "dns_request":
                         dest_ip = self.send_DNS_request(payload, dest_url)
-                        payload = f"{{src:{self.node_ip},dest:{dest_ip},protocol:{protocol},dataLength:{len(data)},data:{data}}}"
+                        if dest_ip:
+                            payload = f"{{src:{self.node_ip},dest:{dest_ip},protocol:{protocol},dataLength:{len(data)},data:{data}}}"
+                        else:
+                            print("NO IP for this URL")
+                            continue
                         ip_datagram = datagram_initialization(payload)
 
-                    if self.has_firewall and not self.firewall.is_allowed_outgoing(dest_ip):
+                    if self.has_firewall and not self.firewall.is_allowed_outgoing(
+                        dest_ip
+                    ):
                         print(f"{dest_ip} is not included in outgoing list")
-                        break
+                        # I think should be continue instead of break. Break might end the whole listening loop?
+                        continue
 
                     if self.vpn_enabled:
                         json_string_ip_datagram = dict_to_json_string(ip_datagram)
