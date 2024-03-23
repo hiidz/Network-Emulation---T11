@@ -50,6 +50,9 @@ pattern = {
     "dns_ip_broadcast": r"^DNS IP\|0x[a-fA-F0-9]{2}",
     "routing_setup": r"Routing Setup\|(0x[0-9a-fA-F]{2})\|(0x[0-9a-fA-F]{2})",
     "routing_acknowledgement": r"Routing Acknowledgement\|(True|False)",
+    # {ip}|{netmask}|{port}|{self.routing_table}"
+    "routing_router_setup": r"Routing Setup Router\|(0x[0-9a-fA-F]{2})\|(0x[0-9a-fA-F]{2})\|(\d+)\|(.+)",
+    "routing_router_acknowledgement": r"Routing Router Acknowledgement\|(0x[0-9a-fA-F]{2})\|(0x[0-9a-fA-F]{2})\|(\d+)\|(.+)",
 }
 
 

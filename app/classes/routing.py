@@ -25,6 +25,30 @@ class Routing_Protocol:
                 return isSuccess
             else:
                 return False
+            
+    def setupRouter(self, conn, netmask, ip, port):
+        setup_router_payload = f"Routing Setup Router|{ip}|{netmask}|{port}|{self.routing_table}"
+        conn.send(bytes(setup_router_payload, "utf-8"))
+
+        while True:
+            data = conn.recv(1024)
+            data = data.decode()
+
+            match = re.match(pattern["routing_router_acknowledgement"], data)
+            if match:
+                receivedIP = match.group(1)
+                receivedNetmask = match.group(2)
+                receivedPort = match.group(3)
+                receivedRoutingTable = match.group(4)
+
+                prefix = hex(int(receivedIP, 16) & int(receivedNetmask, 16)).rstrip("0")
+                self.addEntry(prefix, receivedIP, receivedNetmask, receivedPort)
+
+                print("process connected router routing table with hops here")
+
+                return True
+            else:
+                return False
 
     def addEntry(self, ip_address, gateway, subnet_mask, port):
         entry = {"netmask": subnet_mask, "gateway": gateway, "port": port}
@@ -43,17 +67,15 @@ class Routing_Protocol:
         best_match = None
 
         for key, route in self.routing_table.items():
-            prefix = None
             if key == "default":
-                prefix = hex(
+                key = hex(
                     int(route["gateway"], 16) & int(route["netmask"], 16)
                 ).rstrip("0")
-            else:
-                prefix = hex(int(key, 16) & int(route["netmask"], 16)).rstrip("0")
 
-            if ip.startswith(prefix):
-                if len(prefix) > max_length:
-                    max_length = len(prefix)
+            print(ip, key, "h")
+            if ip.startswith(key):
+                if len(key) > max_length:
+                    max_length = len(key)
                     best_match = route["gateway"]
 
         return best_match
@@ -65,3 +87,7 @@ class Routing_Protocol:
         else:
             acknowledgement_payload = f"Routing Acknowledgement|False"
         conn.send(bytes(acknowledgement_payload, "utf-8"))
+
+    def routingAcknowledgement(self, conn, ipAddress, netmask, port, routingTable):
+        routing_router_acknowledgement = f"Routing Router Acknowledgement|{ipAddress}|{netmask}|{port}|{routingTable}"
+        conn.send(bytes(routing_router_acknowledgement, "utf-8"))

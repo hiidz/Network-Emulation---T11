@@ -2,6 +2,8 @@ HOST = "localhost"
 R1_1_PORT = 8100
 R1_2_PORT = 8200
 R1_3_PORT = 8300
+R2_1_PORT = 8400
+R2_2_PORT = 8500
 
 
 R1_1_CONFIG = {
@@ -23,6 +25,7 @@ R1_2_CONFIG = {
             "netmask": "0xF0",
             "gateway": R1_1_CONFIG["interface_ip_address"],
             "port": R1_1_CONFIG["interface_port"],
+            "hop": 0
         }
     },
 }
@@ -38,12 +41,39 @@ R1_3_CONFIG = {
             "netmask": "0xF0",
             "gateway": R1_1_CONFIG["interface_ip_address"],
             "port": R1_1_CONFIG["interface_port"],
+            "hop": 0
         },
-        "0x21": {
+        "0x2": {
             "netmask": "0xF0",
             "gateway": R1_2_CONFIG["interface_ip_address"],
             "port": R1_2_CONFIG["interface_port"],
+            "hop": 0
         },
+    },
+}
+
+R2_1_CONFIG = {
+    "interface_ip_address": "0x41",
+    "interface_mac": "R4",
+    "interface_port": R2_1_PORT,
+    "subnet_mask": "0xF0",
+    "ip_address_available": ["0x4A"],
+    "connected_router": R1_1_CONFIG
+}
+
+R2_2_CONFIG = {
+    "interface_ip_address": "0x51",
+    "interface_mac": "R5",
+    "interface_port": R2_2_PORT,
+    "subnet_mask": "0xF0",
+    "ip_address_available": ["0x5A", "0x5B"],
+    "default_routing_table": {
+        "default": {
+            "netmask": "0xF0",
+            "gateway": R2_1_CONFIG["interface_ip_address"],
+            "port": R2_1_CONFIG["interface_port"],
+            "hop": 0
+        }
     },
 }
 
@@ -56,9 +86,9 @@ N1_CONFIG = {
             "netmask": "0xF0",
             "gateway": R1_1_CONFIG["interface_ip_address"],
             "port": R1_1_CONFIG["interface_port"],
+            "hop": 1
         }
     },
-    "default_routing_port": R1_1_CONFIG["interface_port"],
     "vpn_interface": "0xA1",
     "vpn_gateway": "0x11",
     "encryption_key": "encryption_key_1"
@@ -73,9 +103,9 @@ N2_CONFIG = {
             "netmask": "0xF0",
             "gateway": R1_2_CONFIG["interface_ip_address"],
             "port": R1_2_CONFIG["interface_port"],
+            "hop": 1
         }
     },
-    "default_routing_port": R1_2_CONFIG["interface_port"],
     "vpn_interface": "0xA2",
     "vpn_gateway": "0x21",
     "encryption_key": "encryption_key_2"
@@ -90,9 +120,9 @@ N3_CONFIG = {
             "netmask": "0xF0",
             "gateway": R1_2_CONFIG["interface_ip_address"],
             "port": R1_2_CONFIG["interface_port"],
+            "hop": 1
         }
     },
-    "default_routing_port": R1_2_CONFIG["interface_port"],
     "vpn_interface": "0xA3",
     "vpn_gateway": "0x21",
     "encryption_key": "encryption_key_3"

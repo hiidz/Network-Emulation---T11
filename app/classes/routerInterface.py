@@ -25,7 +25,6 @@ class RouterInterface:
     conn_list = None
     arp_protocol = None
     dhcp_protocol = None
-    threads = []
     dns_connection = None
 
     # VPN Table for mapping
@@ -43,7 +42,8 @@ class RouterInterface:
         default_routing_table: dict = {},
         default_routing_port=None,
         vpn_table: dict = {},
-        encryption_key_table: dict = {}
+        encryption_key_table: dict = {},
+        connected_router = None,
     ):
 
         self.interface_ip_address = interface_ip_address
@@ -55,7 +55,8 @@ class RouterInterface:
         self.conn_list = {}
         self.dns_connection = None
         self.dns_ip_address = None
-        self.routing_protocol = Routing_Protocol(default_routing_table)
+
+        self.connected_router = connected_router
 
         self.routing_protocol = Routing_Protocol(default_routing_table)
         self.arp_protocol = ARP_Protocol()
@@ -329,7 +330,6 @@ class RouterInterface:
             self.dhcp_protocol.release(ip_address)
 
 
-
     def handle_routing_setup(self, conn, routing_setup, port):
         match = re.match(pattern['routing_setup'], routing_setup)
 
@@ -337,13 +337,33 @@ class RouterInterface:
             subnet_mask_received = match.group(1)
             ip_address_received = match.group(2)
 
+            prefix = hex(int(ip_address_received, 16) & int(subnet_mask_received, 16)).rstrip("0")
 
-            self.routing_protocol.addEntry(ip_address_received, ip_address_received, subnet_mask_received, port)
+            self.routing_protocol.addEntry(prefix, ip_address_received, subnet_mask_received, port)
             self.routing_protocol.acknowledgement(conn, True)
 
             return ip_address_received
 
-    def listen(self, conn, address, listenedIPAddress, isListeningToRouter=False):
+
+    def handle_routing_router_setup(self, conn, routing_router_setup, port):
+        match = re.match(pattern['routing_router_setup'], routing_router_setup)
+
+        if match:
+            receivedIP = match.group(1)
+            receivedNetmask = match.group(2)
+            receivedPort = match.group(3)
+            receivedRoutingTable = match.group(4)
+
+            prefix = hex(int(receivedIP, 16) & int(receivedNetmask, 16)).rstrip("0")
+            self.routing_protocol.addEntry(prefix, receivedIP, receivedNetmask, receivedPort)
+            self.routing_protocol.routingAcknowledgement(conn, self.interface_ip_address, self.subnet_mask, self.interface_port, self.routing_protocol.get_routing_table())
+
+            print("process connected router routing table with hops here")
+
+            return receivedIP
+
+
+    def listen(self, conn, address, listenedIPAddress):
         print(f"Connection from {listenedIPAddress} ({address}) established.")
         self.conn_list[listenedIPAddress] = conn
 
@@ -443,6 +463,10 @@ class RouterInterface:
                     conn_ip_address = self.handle_routing_setup(conn, data, address[1])
                     break
 
+                elif re.match(pattern["routing_router_setup"], data):
+                    conn_ip_address = self.handle_routing_router_setup(conn, data, address[1])
+                    break
+
                 elif re.match(pattern["dns_ip_broadcast"], data):
                     ip_address = data.split("|")[1]
                     self.dns_ip_address = ip_address
@@ -450,12 +474,11 @@ class RouterInterface:
                         self.conn_list[connection].send(bytes(data, "utf-8"))
                     conn_ip_address = None
 
-
                     break
 
                 if conn_ip_address:
                     threading.Thread(
-                        target=self.listen, args=(conn, address, conn_ip_address, True)
+                        target=self.listen, args=(conn, address, conn_ip_address)
                     ).start()
 
                 else:
@@ -466,14 +489,14 @@ class RouterInterface:
             # Connection is established and now ready to indefinitely listen for incoming packets from connection
             if conn_ip_address:
                 threading.Thread(
-                    target=self.listen, args=(conn, address, conn_ip_address, True)
+                    target=self.listen, args=(conn, address, conn_ip_address)
                 ).start()
             if (
                 self.dns_ip_address
                 and self.dns_ip_address[:-1] == self.interface_ip_address[0:-1]
             ):
                 threading.Thread(
-                    target=self.listen, args=(conn, address, self.dns_ip_address, False)
+                    target=self.listen, args=(conn, address, self.dns_ip_address)
                 ).start()
 
         except (ConnectionResetError, ConnectionAbortedError):
@@ -499,7 +522,7 @@ class RouterInterface:
             if isSucess:
                 # Connection is established and now ready to indefinitely listen for incoming packets from connection
                 threading.Thread(
-                    target=self.listen, args=(conn, address, listenedIp, True)
+                    target=self.listen, args=(conn, address, listenedIp)
                 ).start()
 
 
@@ -574,11 +597,62 @@ class RouterInterface:
             else:
                 print("No such command. Try again")
 
+    def connectToRouter(self, routerIP, routerPort):
+        try:
+            if routerIP not in self.conn_list:
+                connected_router_socket = socket.socket(
+                    socket.AF_INET, socket.SOCK_STREAM
+                )
+                connected_router_socket.connect((HOST, routerPort))
+                self.conn_list[routerIP] = connected_router_socket
+                threading.Thread(
+                    target=self.setup_router_connection,
+                    args=(
+                        connected_router_socket,
+                        (HOST, routerPort),
+                        routerIP,
+                    ),
+                ).start()
+            else:
+                print("Connection already established...")
+
+        except ConnectionRefusedError:
+            print(
+                f"Unable to connect to the connected interface with port: {routerPort}."
+            )
+
+        except Exception as e:
+            print(f"Unexpected error 19 {e}")
+
+
+    def setup_router_connection(self, conn, address, listenedIp):
+        try:
+            isSucess = self.routing_protocol.setupRouter(
+                conn, self.subnet_mask, self.interface_ip_address, self.interface_port
+            )
+            if isSucess:
+                # Connection is established and now ready to indefinitely listen for incoming packets from connection
+                threading.Thread(
+                    target=self.listen, args=(conn, address, listenedIp)
+                ).start()
+
+
+
+        except (ConnectionResetError, ConnectionAbortedError):
+            print(f"Failure to setup interface connection with {address}.")
+
+            # Remove routing
+            self.routing_protocol.removeEntry(listenedIp)
+
+
     def start(self):
         # If interface connected to another interface, establish connection request
         print(self.routing_protocol.get_routing_table())
         for gateway in self.routing_protocol.get_routing_table().values():
             self.connectToInterface(gateway['port'], gateway['gateway'])
+
+        if self.connected_router != None:
+            self.connectToRouter(self.connected_router['interface_ip_address'], self.connected_router['interface_port'])
 
         try:
             # A thread that will listen for new incoming connections
