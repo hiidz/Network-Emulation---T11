@@ -74,7 +74,7 @@ class RouterInterface:
 
     def isIPAddressInNetwork(self, ip):
         if int(ip, 16) & int(self.subnet_mask, 16) == int(
-            self.interface_ip_address, 16
+                self.interface_ip_address, 16
         ) & int(self.subnet_mask, 16):
             return True
         else:
@@ -86,42 +86,76 @@ class RouterInterface:
         # If dest in packet matches router address, router is intended recipient
         if packet["dest"] == self.interface_ip_address:
 
-            # Check if data is encrypted
+            # Check if src is a vpn interface
+            source_ip = packet["src"]
             data = packet["data"]
+            is_vpn_interface = False
 
-            # if is_data_encrypted(data):
-            #     print("IT ENTERED HERE")
-            #     src_ip = packet["src"]
-            #     str_encryption_key = self.encryption_key_table[src_ip]
-            #     encryption_key = ensure_bytes(str_encryption_key)
-            #     decrypted_string = decrypt(data, encryption_key)
-            #     # decrypted_string = bytes_to_string(decrypted_bytes)
-            #     decrypted_ip_datagram = json_string_to_dict(decrypted_string)
-            #     decrypted_ip_datagram["src"] = src_ip
-            #     print(f"{decrypted_ip_datagram['dest']}")
-            #     print(f"{decrypted_ip_datagram['protocol']}")
-            #     print(f"{decrypted_ip_datagram['data']}")
-            #     str_packet = str(decrypted_ip_datagram)
-            #     str_packet_valid = str_packet.replace(" ", "").replace("'", "")
-            #     self.handleIPPacket(str_packet_valid)
-            # else:
-            print(
-                f"IP Packet received. Protocol is: {packet['protocol']}. Payload is: {packet['data']}."
-            )
-            if packet["protocol"] == "close_connection":
+            for value in self.vpn_table.values():
+                if value == source_ip:
+                    is_vpn_interface = True
+                    break
+
+            if is_vpn_interface:
+                src_ip = packet["src"]
+                str_encryption_key = self.encryption_key_table[src_ip]
+                encryption_key = ensure_bytes(str_encryption_key)
+                decrypted_string = decrypt(data, encryption_key)
+                # decrypted_string = bytes_to_string(decrypted_bytes)
+                decrypted_ip_datagram = json_string_to_dict(decrypted_string)
+                decrypted_ip_datagram["src"] = src_ip
+                self.process_decrypted_data(decrypted_ip_datagram)
+
+            elif packet["protocol"] == "close_connection":
                 print("Closing connection...")
                 self.conn_list[packet["src"]].close()
                 del self.conn_list[packet["src"]]
-
             # Process IP packet if required
             # # if packet['protocol'] == 'kill/arp etc.':
+            else:
+                print(
+                    f"IP Packet received. Protocol is: {packet['protocol']}. Payload is: {packet['data']}."
+                )
+
+            # if packet["protocol"] == "close_connection":
+            #     print("Closing connection...")
+            #     self.conn_list[packet["src"]].close()
+            #     del self.conn_list[packet["src"]]
+            #
+            # # Process IP packet if required
+            # # # if packet['protocol'] == 'kill/arp etc.':
 
         else:
             # Create EthernetFrame and route to next interface. (for future, can use BGP routing protocol to dynamically update routing table rather than static)
             destination_ip_address = packet["dest"]
-            print(
-                f"Not intended recipient, will forward based on IP packet: {destination_ip_address}"
-            )
+            is_dest_vpn = False
+            dest_ip = packet["dest"]
+            for value in self.vpn_table.values():
+                if value == dest_ip:
+                    is_dest_vpn = True
+                    break
+
+            if is_dest_vpn:
+                protocol = packet["protocol"]
+                for key, value in self.vpn_table.items():
+                    if value == dest_ip:
+                        destination_ip_address = key
+                        # print(f"Destination IP Address: {destination_ip_address}")
+                if protocol == "ping_reply":
+                    encryption_key_str = self.encryption_key_table[dest_ip]
+                    encryption_key = ensure_bytes(encryption_key_str)
+                    # print(f"Encryption Key (bytes): {encryption_key}")
+
+                    print("Starting encrypt_ip_datagram function")
+                    encrypted_ip_datagram = encrypt_ip_datagram(packet, encryption_key,
+                                                                destination_ip_address)
+                    encrypted_ip_datagram["dest"] = destination_ip_address
+                    packet = encrypted_ip_datagram
+            else:
+                destination_ip_address = packet["dest"]
+                print(
+                    f"Not intended recipient, will forward based on IP packet: {destination_ip_address}"
+                )
 
             # Check if IP address is in router network.
             if self.isIPAddressInNetwork(destination_ip_address):
@@ -134,15 +168,15 @@ class RouterInterface:
 
                 # Send out ARP Request if MAC not found
                 while (
-                    not self.arp_protocol.lookup_arp_table(destination_ip_address)
-                    and arp_request_attempt <= max_arp_retries
+                        not self.arp_protocol.lookup_arp_table(destination_ip_address)
+                        and arp_request_attempt <= max_arp_retries
                 ):
                     print(
                         "ARP Attempt "
                         + str(arp_request_attempt)
                         + ": No MAC address found in ARP Table so sending out broadcast"
                     )
-                   
+
                     # Create ARP Request Frame
                     self.arp_protocol.arp_broadcast(
                         destination_ip_address,
@@ -179,6 +213,35 @@ class RouterInterface:
                 print(
                     "Destination IP address is not in the network. Will look up routing table..."
                 )
+
+                # Encrypt the datagram if the dest ip is a vpn interface
+                is_dest_vpn = False
+                dest_ip = packet["dest"]
+                for value in self.vpn_table.values():
+                    if value == dest_ip:
+                        is_dest_vpn = True
+                        break
+
+                if is_dest_vpn:
+                    protocol = packet["protocol"]
+                    for key, value in self.vpn_table.items():
+                        if value == dest_ip:
+                            destination_ip_address = key
+                            # print(f"Destination IP Address: {destination_ip_address}")
+                    if protocol == "ping_reply":
+                        encryption_key_str = self.encryption_key_table[dest_ip]
+                        encryption_key = ensure_bytes(encryption_key_str)
+                        # print(f"Encryption Key (bytes): {encryption_key}")
+
+                        print("Starting encrypt_ip_datagram function")
+                        # json_string_ip_datagram = dict_to_json_string(packet)
+                        # print(f"JSON string: {json_string_ip_datagram}")
+                        # bytes_ip_datagram = ensure_bytes(json_string_ip_datagram)
+                        # print(f"Bytes IP Datagram: {bytes_ip_datagram}")
+                        encrypted_ip_datagram = encrypt_ip_datagram(packet, encryption_key,
+                                                                    destination_ip_address)
+                        encrypted_ip_datagram["dest"] = destination_ip_address
+                        packet = encrypted_ip_datagram
 
                 # Get next hop IP address
                 next_hop_ip = self.routing_protocol.getNextHopIP(destination_ip_address)
@@ -449,6 +512,27 @@ class RouterInterface:
 
 
     def listen(self, conn, address, listenedIPAddress):
+    def process_decrypted_data(self, decrypted_ip_datagram):
+        dest_ip = decrypted_ip_datagram["dest"]
+        protocol = decrypted_ip_datagram["protocol"]
+
+        if dest_ip == self.interface_ip_address:
+            if protocol == "close_connection":
+                print("Closing connection...")
+                self.conn_list[decrypted_ip_datagram["src"]].close()
+                del self.conn_list[decrypted_ip_datagram["src"]]
+            # Process IP packet if required
+            # # if packet['protocol'] == 'kill/arp etc.':
+            else:
+                print(
+                    f"IP Packet received. Protocol is: {decrypted_ip_datagram['protocol']}. Payload is: {decrypted_ip_datagram['data']}."
+                )
+        else:
+            str_packet = str(decrypted_ip_datagram)
+            str_packet_valid = str_packet.replace(" ", "").replace("'", "")
+            self.handleIPPacket(str_packet_valid)
+
+    def listen(self, conn, address, listenedIPAddress, isListeningToRouter=False):
         print(f"Connection from {listenedIPAddress} ({address}) established.")
         self.conn_list[listenedIPAddress] = conn
 
@@ -586,8 +670,8 @@ class RouterInterface:
                 # ).start()
                 self.listen(conn, address, conn_ip_address)
             if (
-                self.dns_ip_address
-                and self.dns_ip_address[:-1] == self.interface_ip_address[0:-1]
+                    self.dns_ip_address
+                    and self.dns_ip_address[:-1] == self.interface_ip_address[0:-1]
             ):
                 # threading.Thread(
                 #     target=self.listen, args=(conn, address, self.dns_ip_address, False)

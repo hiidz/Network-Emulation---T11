@@ -45,16 +45,16 @@ class Node:
     cipher = None
 
     def __init__(
-        self,
-        node_mac,
-        default_routing_table: dict = None,
-        # default_routing_port=None,
-        url=None,
-        has_firewall: bool = False,
-        is_malicious: bool = False,
-        vpn_ip_address=None,
-        vpn_gateway=None,
-        encryption_key=None,
+            self,
+            node_mac,
+            default_routing_table: dict = None,
+            # default_routing_port=None,
+            url=None,
+            has_firewall: bool = False,
+            is_malicious: bool = False,
+            vpn_ip_address=None,
+            vpn_gateway=None,
+            encryption_key=None,
     ):
         self.node_mac = node_mac
         self.url = url
@@ -228,7 +228,16 @@ class Node:
             # print(
             #     f"IP Packet received. Protocol is: {packet['protocol']}. Payload is: {packet['data']}."
             # )
+
             protocol = packet["protocol"]
+            if protocol == "encrypted":
+                data = packet["data"]
+                decrypted_string = self.decrypt(data)
+                # decrypted_string = bytes_to_string(decrypted_bytes)
+                decrypted_ip_datagram = json_string_to_dict(decrypted_string)
+                packet = decrypted_ip_datagram
+                protocol = packet["protocol"]
+
             if protocol == "kill":
                 print("Carrying out kill protocol")
 
@@ -236,9 +245,10 @@ class Node:
                 ip_datagram = datagram_initialization(payload)
 
                 if self.has_firewall and not self.firewall.is_allowed_outgoing(
-                    packet["src"]
+                        packet["src"]
                 ):
                     print(f"{packet['src']} is not included in outgoing list")
+                    return
 
                 route_ip = self.send_ARP_request(payload)
                 if self.arp_protocol.lookup_arp_table(route_ip):
@@ -268,22 +278,13 @@ class Node:
                 ip_datagram = datagram_initialization(payload)
 
                 if self.has_firewall and not self.firewall.is_allowed_outgoing(
-                    packet["src"]
+                        packet["src"]
                 ):
                     print(f"{packet['src']} is not included in outgoing list")
+                    return
 
                 if self.vpn_enabled:
-                    json_string_ip_datagram = dict_to_json_string(ip_datagram)
-                    bytes_ip_datagram = ensure_bytes(json_string_ip_datagram)
-                    encrypted_ip_datagram = self.encrypt(bytes_ip_datagram)
-                    src_ip = self.vpn_ip_address
-                    destination_ip = self.vpn_gateway
-                    protocol = ip_datagram["protocol"]
-                    length = len(encrypted_ip_datagram)
-                    new_payload = f"{{src:{src_ip},dest:{destination_ip},protocol:{protocol},dataLength:{length},data:{encrypted_ip_datagram}}}"
-                    new_ip_datagram = datagram_initialization(new_payload)
-
-                    ip_datagram = new_ip_datagram
+                    ip_datagram = self.encrypt_ip_datagram(ip_datagram)
 
                 route_ip = self.send_ARP_request(payload)
                 if self.arp_protocol.lookup_arp_table(route_ip):
@@ -403,14 +404,27 @@ class Node:
             print("Deactivating VPN...")
             print(f"Reverting IP address to: {self.node_ip}")
 
+    def encrypt_ip_datagram(self, ip_datagram):
+        json_string_ip_datagram = dict_to_json_string(ip_datagram)
+        bytes_ip_datagram = ensure_bytes(json_string_ip_datagram)
+        encrypted_ip_datagram = self.encrypt(bytes_ip_datagram)
+        src_ip = self.vpn_ip_address
+        destination_ip = self.vpn_gateway
+        protocol = "encrypted"
+        length = len(encrypted_ip_datagram)
+        new_payload = f"{{src:{src_ip},dest:{destination_ip},protocol:{protocol},dataLength:{length},data:{encrypted_ip_datagram}}}"
+        new_ip_datagram = datagram_initialization(new_payload)
+
+        return new_ip_datagram
+
     def send_DNS_request(self, payload, dest_url):
         route_ip = self.send_ARP_request(payload)
 
         max_dns_request_retries = 3
         dns_request_attempt = 1
         while (
-            not self.dns_protocol.lookup_dns_cache(dest_url)
-            and dns_request_attempt <= max_dns_request_retries
+                not self.dns_protocol.lookup_dns_cache(dest_url)
+                and dns_request_attempt <= max_dns_request_retries
         ):
             print(
                 "DNS Attempt "
@@ -454,8 +468,8 @@ class Node:
         arp_request_attempt = 1
 
         while (
-            not self.arp_protocol.lookup_arp_table(route_ip)
-            and arp_request_attempt <= max_arp_retries
+                not self.arp_protocol.lookup_arp_table(route_ip)
+                and arp_request_attempt <= max_arp_retries
         ):
             print(
                 "ARP Attempt "
@@ -539,24 +553,14 @@ class Node:
                         ip_datagram = datagram_initialization(payload)
 
                     if self.has_firewall and not self.firewall.is_allowed_outgoing(
-                        dest_ip
+                            dest_ip
                     ):
                         print(f"{dest_ip} is not included in outgoing list")
                         # I think should be continue instead of break. Break might end the whole listening loop?
                         continue
 
                     if self.vpn_enabled:
-                        json_string_ip_datagram = dict_to_json_string(ip_datagram)
-                        bytes_ip_datagram = ensure_bytes(json_string_ip_datagram)
-                        encrypted_ip_datagram = self.encrypt(bytes_ip_datagram)
-                        src_ip = self.vpn_ip_address
-                        destination_ip = self.vpn_gateway
-                        protocol = ip_datagram["protocol"]
-                        length = len(encrypted_ip_datagram)
-                        new_payload = f"{{src:{src_ip},dest:{destination_ip},protocol:{protocol},dataLength:{length},data:{encrypted_ip_datagram}}}"
-                        new_ip_datagram = datagram_initialization(new_payload)
-
-                        ip_datagram = new_ip_datagram
+                        ip_datagram = self.encrypt_ip_datagram(ip_datagram)
 
                     route_ip = self.send_ARP_request(payload)
                     if self.arp_protocol.lookup_arp_table(route_ip):
