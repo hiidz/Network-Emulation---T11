@@ -68,6 +68,10 @@ def encrypt(plaintext, encryption_key):
     if isinstance(plaintext, str):
         plaintext = plaintext.encode()
 
+    # Also ensure the encryption_key is in bytes
+    if isinstance(encryption_key, str):
+        encryption_key = encryption_key.encode()
+
     # Pad plaintext to be a multiple of 16 bytes (AES block size)
     padded_plaintext = pad(plaintext, AES.block_size)
 
@@ -98,12 +102,26 @@ def decrypt(encrypted_text, encryption_key):
 
 
 def is_data_encrypted(data):
+    # Check if data is binary
+    if isinstance(data, bytes):
+        try:
+            # Attempt to decode to UTF-8 string
+            decoded_data = data.decode('utf-8')
+
+            # Check if the decoded data is JSON
+            json.loads(decoded_data)
+            return False
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return True  # Data is binary and not JSON, could be encrypted
+
+    # If it's not binary, check if it's a JSON string
     try:
-        # Try to parse the data as JSON
         json.loads(data)
-        return False  # Data is JSON, so probably not encrypted
+        return False
     except json.JSONDecodeError:
-        return True  # Data is not JSON, could be encrypted
+        return True
+
+    return False  # Default case if no other conditions are met
 
 
 def ensure_bytes(key):
@@ -141,3 +159,24 @@ def bytes_to_string(byte_data):
         return byte_data.decode()
     else:
         raise TypeError("Input must be bytes, not {}".format(type(byte_data).__name__))
+
+
+def encrypt_ip_datagram(ip_datagram, encryption_key, dest_ip):
+    print("Starting encrypt_ip_datagram function")
+    json_string_ip_datagram = dict_to_json_string(ip_datagram)
+    print(f"JSON string: {json_string_ip_datagram}")
+    bytes_ip_datagram = ensure_bytes(json_string_ip_datagram)
+    print(f"Bytes IP Datagram: {bytes_ip_datagram}")
+    encrypted_ip_datagram = encrypt(bytes_ip_datagram, encryption_key)
+    print(f"Encrypted IP Datagram: {encrypted_ip_datagram}")
+    src_ip = ip_datagram["src"]
+    destination_ip = dest_ip
+    protocol = "encrypted"
+    length = len(encrypted_ip_datagram)
+
+    # Construct new payload with base64 encoded encrypted data
+    new_payload = f"{{src:{src_ip},dest:{destination_ip},protocol:{protocol},dataLength:{length},data:{encrypted_ip_datagram}}}"
+    new_ip_datagram = datagram_initialization(new_payload)
+
+    print("Completed encrypt_ip_datagram function")
+    return new_ip_datagram
