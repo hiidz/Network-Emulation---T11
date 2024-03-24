@@ -53,6 +53,7 @@ pattern = {
     # {ip}|{netmask}|{port}|{self.routing_table}"
     "routing_router_setup": r"Routing Setup Router\|(0x[0-9a-fA-F]{2})\|(0x[0-9a-fA-F]{2})\|(\d+)\|(.+)",
     "routing_router_acknowledgement": r"Routing Router Acknowledgement\|(0x[0-9a-fA-F]{2})\|(0x[0-9a-fA-F]{2})\|(\d+)\|(.+)",
+    "routing_broadcast": r"Routing Table Broadcast\|(.+)"
 }
 
 

@@ -4,6 +4,8 @@ R1_2_PORT = 8200
 R1_3_PORT = 8300
 R2_1_PORT = 8400
 R2_2_PORT = 8500
+R3_1_PORT = 8600
+R3_2_PORT = 8700
 
 
 R1_1_CONFIG = {
@@ -58,7 +60,7 @@ R2_1_CONFIG = {
     "interface_port": R2_1_PORT,
     "subnet_mask": "0xF0",
     "ip_address_available": ["0x4A"],
-    "connected_router": R1_1_CONFIG
+    "connected_router": R1_3_CONFIG
 }
 
 R2_2_CONFIG = {
@@ -72,6 +74,31 @@ R2_2_CONFIG = {
             "netmask": "0xF0",
             "gateway": R2_1_CONFIG["interface_ip_address"],
             "port": R2_1_CONFIG["interface_port"],
+            "hop": 0
+        }
+    },
+}
+
+R3_1_CONFIG = {
+    "interface_ip_address": "0x61",
+    "interface_mac": "R6",
+    "interface_port": R3_1_PORT,
+    "subnet_mask": "0xF0",
+    "ip_address_available": ["0x6A"],
+    "connected_router": R2_2_CONFIG
+}
+
+R3_2_CONFIG = {
+    "interface_ip_address": "0x71",
+    "interface_mac": "R7",
+    "interface_port": R3_2_PORT,
+    "subnet_mask": "0xF0",
+    "ip_address_available": ["0x7A", "0x7B"],
+    "default_routing_table": {
+        "default": {
+            "netmask": "0xF0",
+            "gateway": R3_1_CONFIG["interface_ip_address"],
+            "port": R3_1_CONFIG["interface_port"],
             "hop": 0
         }
     },
@@ -120,6 +147,23 @@ N3_CONFIG = {
             "netmask": "0xF0",
             "gateway": R1_2_CONFIG["interface_ip_address"],
             "port": R1_2_CONFIG["interface_port"],
+            "hop": 1
+        }
+    },
+    "vpn_interface": "0xA3",
+    "vpn_gateway": "0x21",
+    "encryption_key": "encryption_key_3"
+}
+
+N4_CONFIG = {
+    "node_mac": "N4",
+    "url": "www.node4.com",
+    "interface_mac": R2_1_CONFIG["interface_mac"],
+    "default_routing_table": {
+        "default": {
+            "netmask": "0xF0",
+            "gateway": R2_1_CONFIG["interface_ip_address"],
+            "port": R2_1_CONFIG["interface_port"],
             "hop": 1
         }
     },
