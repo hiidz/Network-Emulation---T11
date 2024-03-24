@@ -66,6 +66,18 @@ class Routing_Protocol:
     def getNextHopIP(self, ip):
         max_length = 0
         best_match = None
+        best_hop = float('inf')
+
+        # for key, route in self.routing_table.items():
+        #     if key == "default":
+        #         key = hex(
+        #             int(route["gateway"], 16) & int(route["netmask"], 16)
+        #         ).rstrip("0")
+
+        #     if ip.startswith(key):
+        #         if len(key) > max_length:
+        #             max_length = len(key)
+        #             best_match = route["gateway"]
 
         for key, route in self.routing_table.items():
             if key == "default":
@@ -74,9 +86,10 @@ class Routing_Protocol:
                 ).rstrip("0")
 
             if ip.startswith(key):
-                if len(key) > max_length:
+                if len(key) > max_length and route["hop"] < best_hop:
                     max_length = len(key)
                     best_match = route["gateway"]
+                    best_hop = route["hop"]
 
         return best_match
 
