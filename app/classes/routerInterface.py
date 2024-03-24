@@ -511,7 +511,6 @@ class RouterInterface:
             print("FAIL")
 
 
-    def listen(self, conn, address, listenedIPAddress):
     def process_decrypted_data(self, decrypted_ip_datagram):
         dest_ip = decrypted_ip_datagram["dest"]
         protocol = decrypted_ip_datagram["protocol"]
@@ -532,7 +531,7 @@ class RouterInterface:
             str_packet_valid = str_packet.replace(" ", "").replace("'", "")
             self.handleIPPacket(str_packet_valid)
 
-    def listen(self, conn, address, listenedIPAddress, isListeningToRouter=False):
+    def listen(self, conn, address, listenedIPAddress):
         print(f"Connection from {listenedIPAddress} ({address}) established.")
         self.conn_list[listenedIPAddress] = conn
 
@@ -608,11 +607,11 @@ class RouterInterface:
             self.dhcp_protocol.release(listenedIPAddress)
             return
 
-        # except Exception as e:
-        #     if "Bad file descriptor" in str(e):
-        #         print("Listen stopped")
-        #     else:
-        #         print(f"Unexpected error 4: {e}")
+        except Exception as e:
+            if "Bad file descriptor" in str(e):
+                print("Listen stopped")
+            else:
+                print(f"Unexpected error 4: {e}")
 
     # Handle request for connection from other clients and/or interfaces
     def handle_connection(self, conn, address):
@@ -687,11 +686,11 @@ class RouterInterface:
             self.dhcp_protocol.release(conn_ip_address)
             return
 
-        # except Exception as e:
-        #     if "Bad file descriptor" in str(e):
-        #         print("Handle connection stopped")
-        #     else:
-        #         print(f"Unexpected error 6: {e}")
+        except Exception as e:
+            if "Bad file descriptor" in str(e):
+                print("Handle connection stopped")
+            else:
+                print(f"Unexpected error 6: {e}")
 
     # Initiate connection with another interface
     def setup_interface_connection(self, conn, address, listenedIp):
