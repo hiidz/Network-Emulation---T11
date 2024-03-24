@@ -124,7 +124,6 @@ class RouterInterface:
             # Create EthernetFrame and route to next interface. (for future, can use BGP routing protocol to dynamically update routing table rather than static)
             destination_ip_address = packet["dest"]
             is_dest_vpn = False
-            data = packet["data"]
             dest_ip = packet["dest"]
             for value in self.vpn_table.values():
                 if value == dest_ip:
@@ -132,22 +131,17 @@ class RouterInterface:
                     break
 
             if is_dest_vpn:
-                src_ip = packet["src"]
                 protocol = packet["protocol"]
                 for key, value in self.vpn_table.items():
                     if value == dest_ip:
                         destination_ip_address = key
-                        print(f"Destination IP Address: {destination_ip_address}")
+                        # print(f"Destination IP Address: {destination_ip_address}")
                 if protocol == "ping_reply":
                     encryption_key_str = self.encryption_key_table[dest_ip]
                     encryption_key = ensure_bytes(encryption_key_str)
-                    print(f"Encryption Key (bytes): {encryption_key}")
+                    # print(f"Encryption Key (bytes): {encryption_key}")
 
                     print("Starting encrypt_ip_datagram function")
-                    # json_string_ip_datagram = dict_to_json_string(packet)
-                    # print(f"JSON string: {json_string_ip_datagram}")
-                    # bytes_ip_datagram = ensure_bytes(json_string_ip_datagram)
-                    # print(f"Bytes IP Datagram: {bytes_ip_datagram}")
                     encrypted_ip_datagram = encrypt_ip_datagram(packet, encryption_key,
                                                                 destination_ip_address)
                     encrypted_ip_datagram["dest"] = destination_ip_address
@@ -217,7 +211,6 @@ class RouterInterface:
 
                 # Encrypt the datagram if the dest ip is a vpn interface
                 is_dest_vpn = False
-                data = packet["data"]
                 dest_ip = packet["dest"]
                 for value in self.vpn_table.values():
                     if value == dest_ip:
@@ -225,16 +218,15 @@ class RouterInterface:
                         break
 
                 if is_dest_vpn:
-                    src_ip = packet["src"]
                     protocol = packet["protocol"]
                     for key, value in self.vpn_table.items():
                         if value == dest_ip:
                             destination_ip_address = key
-                            print(f"Destination IP Address: {destination_ip_address}")
+                            # print(f"Destination IP Address: {destination_ip_address}")
                     if protocol == "ping_reply":
                         encryption_key_str = self.encryption_key_table[dest_ip]
                         encryption_key = ensure_bytes(encryption_key_str)
-                        print(f"Encryption Key (bytes): {encryption_key}")
+                        # print(f"Encryption Key (bytes): {encryption_key}")
 
                         print("Starting encrypt_ip_datagram function")
                         # json_string_ip_datagram = dict_to_json_string(packet)
