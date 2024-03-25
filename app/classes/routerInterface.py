@@ -110,6 +110,8 @@ class RouterInterface:
                 print("Closing connection...")
                 self.conn_list[packet["src"]].close()
                 del self.conn_list[packet["src"]]
+                self.dhcp_protocol.release(packet['src'])
+
             # Process IP packet if required
             # # if packet['protocol'] == 'kill/arp etc.':
             else:
@@ -283,7 +285,7 @@ class RouterInterface:
                         + str(arp_request_attempt)
                         + ": No MAC address found in ARP Table so sending out broadcast"
                     )
-                   
+
                     # Create ARP Request Frame
                     self.arp_protocol.arp_broadcast(
                         next_hop_ip,
@@ -462,7 +464,6 @@ class RouterInterface:
 
             return ip_address_received
 
-
     def handle_routing_router_setup(self, conn, routing_router_setup, port):
         match = re.match(pattern['routing_router_setup'], routing_router_setup)
 
@@ -479,12 +480,10 @@ class RouterInterface:
             # print("process connected router routing table with hops here")
             self.routing_protocol.mergeTable(receivedRoutingTable, receivedIP, self.interfaceList)
 
-            
             # self.interfaceList[receivedIP] = conn
             self.routerList[receivedIP] = conn
 
             return receivedIP
-        
 
     def handleRoutingBroadcast(self, routingBroadcast, listenedIPAddress):
         match = re.match(pattern['routing_broadcast'], routingBroadcast)
@@ -492,7 +491,6 @@ class RouterInterface:
         if match:
             receivedRoutingTable = match.group(1)
             self.routing_protocol.mergeTable(receivedRoutingTable, listenedIPAddress, self.interfaceList)
-
 
     def routingBroadcast(self):
         try:
@@ -509,7 +507,6 @@ class RouterInterface:
                     sock.send(bytes(response_payload, "utf-8"))
         except:
             print("FAIL")
-
 
     def process_decrypted_data(self, decrypted_ip_datagram):
         dest_ip = decrypted_ip_datagram["dest"]
@@ -808,7 +805,6 @@ class RouterInterface:
         except Exception as e:
             print(f"Unexpected error 19 {e}")
 
-
     def setup_router_connection(self, conn, address, listenedIp):
         try:
             isSucess = self.routing_protocol.setupRouter(
@@ -822,14 +818,11 @@ class RouterInterface:
                     target=self.listen, args=(conn, address, listenedIp)
                 ).start()
 
-
-
         except (ConnectionResetError, ConnectionAbortedError):
             print(f"Failure to setup interface connection with {address}.")
 
             # Remove routing
             self.routing_protocol.removeEntry(listenedIp)
-
 
     def start(self):
         # If interface connected to another interface, establish connection request
