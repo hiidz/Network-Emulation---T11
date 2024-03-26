@@ -2,6 +2,7 @@ import os
 import pyshark
 import json
 from util import datagram_initialization
+import threading
 
 
 class Attacks:
@@ -24,11 +25,11 @@ class Attacks:
                 data = "no data"
             if "Who has IP" in data or "Gratuitous ARP" in data:
                 print("PACKET FOUND: It is a ARP request")
-            elif data == "no data":
-                print("PACKET FOUND: No data found")
+            # elif data == "no data":
+            #     print("PACKET FOUND: No data found")
             elif "ARP Response" in data:
                 print("PACKET FOUND: ARP response")
-            else:
+            elif data != "no data":
 
                 ip_datagram = data.split("{")[2]
                 attributes = ip_datagram.split(",")
@@ -39,8 +40,7 @@ class Attacks:
                     or dest_configured_ip == self.ip_address_sniffed
                 ):
                     print(f"PACKET FOUND: Protocol: {protocol}, Data: {data}")
-                else:
-                    print("Not what we are sniffing for so dropping")
+                
 
     def enable_sniffing(self):
         self.is_sniffing = True
@@ -59,7 +59,7 @@ class Attacks:
         )
         print("Press CTRL+C to end sniffing session")
         try:
-            for pkt in self.capture.sniff_continuously(packet_count=10):
+            for pkt in self.capture.sniff_continuously(packet_count=100):
                 self.sniff_packet_handler(pkt)
         except KeyboardInterrupt:
             print("\n----Ended sniffing session-----")
@@ -75,7 +75,9 @@ class Attacks:
         user_input = input("> ")
 
         if user_input == "enable" or user_input == "e":
-            self.enable_sniffing()
+            thread = threading.Thread(target=self.enable_sniffing())
+            thread.start()
+            # self.enable_sniffing()
 
         else:
             print("Commands to configure sniffer:")
