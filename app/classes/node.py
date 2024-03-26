@@ -496,7 +496,7 @@ class Node:
             elif command_input == "spoof" and self.is_malicious:
                 spoof_ip = input("Enter IP address to spoof: ")
                 dest_ip = input("Enter destination address: ")
-                payload = f"{{src:{spoof_ip},dest:{dest_ip},protocol:kill,dataLength:5,data:thisisfromspoofedIP}}"
+                payload = f"{{src:{spoof_ip},dest:{dest_ip},protocol:ping,dataLength:5,data:thisisfromspoofedIP}}"
             elif command_input == "sniff" and self.is_malicious:
                 self.attacks.handle_sniffer_input()
             elif command_input == "whoami":
