@@ -1,4 +1,0 @@
-Useful References
-
-- https://medium.com/swlh/creating-a-simple-router-simulation-using-python-and-sockets-d6017b441c09
-- https://github.com/lohkokwee/CS441
