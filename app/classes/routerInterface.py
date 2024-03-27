@@ -831,7 +831,8 @@ class RouterInterface:
             self.connectToInterface(gateway["port"], gateway["gateway"])
 
         if self.connected_router != None:
-            self.connectToRouter(self.connected_router['interface_ip_address'], self.connected_router['interface_port'])
+            for connRouter in self.connected_router:
+                self.connectToRouter(connRouter['interface_ip_address'], connRouter['interface_port'])
 
         try:
             # A thread that will listen for new incoming connections

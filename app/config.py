@@ -60,7 +60,7 @@ R2_1_CONFIG = {
     "interface_port": R2_1_PORT,
     "subnet_mask": "0xF0",
     "ip_address_available": ["0x4A"],
-    "connected_router": R1_3_CONFIG
+    "connected_router": [R1_3_CONFIG]
 }
 
 R2_2_CONFIG = {
@@ -85,7 +85,8 @@ R3_1_CONFIG = {
     "interface_port": R3_1_PORT,
     "subnet_mask": "0xF0",
     "ip_address_available": ["0x6A"],
-    "connected_router": R2_2_CONFIG
+    # "connected_router": [R2_2_CONFIG]
+    "connected_router": [R1_3_CONFIG]
 }
 
 R3_2_CONFIG = {
@@ -102,6 +103,7 @@ R3_2_CONFIG = {
             "hop": 0
         }
     },
+    "connected_router": [R2_2_CONFIG]
 }
 
 N1_CONFIG = {

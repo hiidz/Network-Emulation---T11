@@ -130,7 +130,7 @@ class Routing_Protocol:
                             else:
                                 self.addEntry(receivedPrefix, listenedIPAddress, gateway['netmask'], gateway['port'], gateway['hop'])
 
-                else:
+                elif key != interfacePrefix:
                     if receivedPrefix != interfacePrefix:
                         if key in self.routing_table:
                             if self.routing_table[key]['hop'] > gateway['hop']:
@@ -145,7 +145,10 @@ class Routing_Protocol:
                                 if self.routing_table['default']['hop'] > gateway['hop'] + 1:
                                     self.addEntry('default', listenedIPAddress, gateway['netmask'], gateway['port'], gateway['hop'] + 1)
                             else:
-                                if self.routing_table['default']['hop'] > gateway['hop'] + 1:
+                                if receivedPrefix in self.routing_table:
+                                    if self.routing_table[receivedPrefix]['hop'] > gateway['hop'] + 1:
+                                        self.addEntry(receivedPrefix, listenedIPAddress, gateway['netmask'], gateway['port'], gateway['hop'] + 1)
+                                else:
                                     self.addEntry(receivedPrefix, listenedIPAddress, gateway['netmask'], gateway['port'], gateway['hop'] + 1)
                         else:
                             if receivedPrefix in self.routing_table:
@@ -154,10 +157,17 @@ class Routing_Protocol:
                             else:
                                 self.addEntry(receivedPrefix, listenedIPAddress, gateway['netmask'], gateway['port'], gateway['hop'] + 1)
 
-                else:
+                elif key != interfacePrefix:
                     if receivedPrefix != interfacePrefix:
                         if key in self.routing_table:
                             if self.routing_table[key]['hop'] > gateway['hop'] + 1:
                                 self.addEntry(key, listenedIPAddress, gateway['netmask'], gateway['port'], gateway['hop'] + 1)
                         else:
-                            self.addEntry(key, listenedIPAddress, gateway['netmask'], gateway['port'], gateway['hop'] + 1)
+                            if defaultPrefix != None:
+                                if key == defaultPrefix:
+                                    if self.routing_table['default']['hop'] > gateway['hop'] + 1:
+                                        self.addEntry('default', listenedIPAddress, gateway['netmask'], gateway['port'], gateway['hop'] + 1)
+                                else:
+                                    self.addEntry(key, listenedIPAddress, gateway['netmask'], gateway['port'], gateway['hop'] + 1)
+                            else:
+                                self.addEntry(key, listenedIPAddress, gateway['netmask'], gateway['port'], gateway['hop'] + 1)
