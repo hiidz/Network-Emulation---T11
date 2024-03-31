@@ -85,6 +85,9 @@ class Node:
         self.vpn_ip_address = vpn_ip_address
         self.vpn_gateway = vpn_gateway
 
+        # gratituous arp
+        self.gratituous_arp_ip = [] 
+
         # Initialize encryption
         if encryption_key:
             self.encryption_key = ensure_bytes(encryption_key)
@@ -224,7 +227,7 @@ class Node:
             return
 
         # If dest in packet matches router address, router is intended recipient
-        if packet["dest"] == self.node_ip:
+        if packet["dest"] == self.node_ip or packet["dest"] in self.gratituous_arp_ip:
             # print(
             #     f"IP Packet received. Protocol is: {packet['protocol']}. Payload is: {packet['data']}."
             # )
@@ -238,7 +241,7 @@ class Node:
                 packet = decrypted_ip_datagram
                 protocol = packet["protocol"]
 
-            if protocol == "kill":
+            if protocol == "1":
                 print("Carrying out kill protocol")
 
                 payload = f"{{src:{self.node_ip},dest:{self.routing_protocol.get_routing_table()['default']['gateway']},protocol:close_connection,dataLength:0,data:Close connection}}"
@@ -272,8 +275,11 @@ class Node:
                 print("EXITING")
                 os._exit(1)
 
-            elif protocol == "ping":
+            elif protocol == "0":
                 print("Carrying out ping protol")
+                if packet["dest"] in self.gratituous_arp_ip:
+                    packet['data'] += "YOU GOT A RESPONSE FROM THE WRONG PERSON"
+
                 payload = f"{{src:{self.node_ip},dest:{packet['src']},protocol:ping_reply,dataLength:{len(packet['data'])},data:{packet['data']}}}"
                 ip_datagram = datagram_initialization(payload)
 
@@ -496,7 +502,7 @@ class Node:
             elif command_input == "spoof" and self.is_malicious:
                 spoof_ip = input("Enter IP address to spoof: ")
                 dest_ip = input("Enter destination address: ")
-                payload = f"{{src:{spoof_ip},dest:{dest_ip},protocol:ping,dataLength:5,data:thisisfromspoofedIP}}"
+                payload = f"{{src:{spoof_ip},dest:{dest_ip},protocol:0,dataLength:5,data:thisisfromspoofedIP}}"
             elif command_input == "sniff" and self.is_malicious:
                 self.attacks.handle_sniffer_input()
             elif command_input == "whoami":
@@ -508,7 +514,7 @@ class Node:
                 self.toggle_vpn()
             elif command_input == "send data":
                 dest_url = input("Who do you want to send it to? (URL): ")
-                protocol = input("Pick one protocol (kill/ ping): ")
+                protocol = input("Pick one protocol (0 for ping / 1 for kill): ")
                 data = input("Enter the data that you want to enter: ")
 
                 if self.dns_protocol.lookup_dns_cache(dest_url):
@@ -520,6 +526,11 @@ class Node:
                     print("Need to find DNS record")
                     dns_data = "DNS_Request|url:" + dest_url
                     payload = f"{{src:{self.node_ip},dest:{self.dns_ip_address},protocol:dns_request,dataLength:{len(dns_data)},data:{dns_data}}}"
+            elif command_input == "gratuitous arp":
+                ip_address= input("What ip are you broadcasting for ? (IP): ")
+                mac_address = input("what is the new mac: (MAC) ")
+
+                payload = f"Gratuitous ARP|{ip_address} is now at {mac_address}"
 
             else:
                 print("INVALID COMMAND")
@@ -531,7 +542,8 @@ class Node:
                     print("- spoof \t Send spoofed IP packet")
                     print("sniff \t Sniff IP packets within a network")
                 print("- whoami \t Show own MAC and IP address")
-                print("- show arp table \t Show ARP table")
+                print("- show arp \t Show ARP table")
+                print("- gratuitous arp \t seng gratuitous arp")
                 print("- send data \t Send data to another node or router")
                 print_brk()
 
@@ -540,6 +552,13 @@ class Node:
                 if payload.split("|")[0] == "requestconnection":
                     self.client.send(bytes(payload, "utf-8"))
                 elif payload.split("|")[0] == "Gratuitous ARP":
+                    truncated_payload = payload.split('|')[1]
+                    pattern = r"(0x\w{2}) is now at (\w{2})"
+                    match = re.match(pattern, truncated_payload)
+                    if match:
+                        ip_address = match.group(1)
+                        self.gratituous_arp_ip.append(ip_address)
+
                     self.arp_protocol.gratitous_arp(payload, self.conn_list)
                 else:
                     ip_datagram = datagram_initialization(payload)
