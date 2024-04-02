@@ -474,7 +474,7 @@ class RouterInterface:
             receivedRoutingTable = match.group(4)
 
             prefix = hex(int(receivedIP, 16) & int(receivedNetmask, 16)).rstrip("0")
-            self.routing_protocol.addEntry(prefix, receivedIP, receivedNetmask, receivedPort, 1)
+            self.routing_protocol.addEntry(prefix, receivedIP, receivedNetmask, port, 1)
             self.routing_protocol.routingAcknowledgement(conn, self.interface_ip_address, self.subnet_mask, self.interface_port, self.routing_protocol.get_routing_table())
 
             # print("process connected router routing table with hops here")
